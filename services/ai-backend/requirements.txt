@@ -1,0 +1,67 @@
+# FLIO AI Backend Services
+# Python 3.11+
+# Face Verification + Profile Matching + Adaptive Questions + Speech
+
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+
+# AI/ML Core
+torch==2.5.0
+torchvision==0.20.0
+transformers==4.46.0
+
+# Profile Matching - BGE-M3 (MTEB #1 multilingual)
+# Dense + Sparse + ColBERT hybrid search
+FlagEmbedding==1.2.0
+sentence-transformers==3.3.0
+
+# Question Generation - Qwen2.5-7B-Instruct
+# Apache 2.0 license, best Korean performance
+# transformers already installed above
+
+# Reranking - Qwen3-Reranker (2025 MTEB #1)
+# Improves RAG accuracy by 15-20%
+# Uses same transformers library
+
+# STT - Whisper (self-hosted Korean)
+# Using faster-whisper for better performance (CTranslate2 backend)
+faster-whisper==1.0.3
+openai-whisper==20231117  # For audio preprocessing
+
+# TTS - CosyVoice2 (2025 best benchmark)
+# Ultra-low latency 150ms, Korean/Chinese/English/Japanese
+# Fine-grained emotion control, Apache 2.0 license
+cosyvoice>=0.1.0
+melo-tts==0.1.2  # Fallback
+edge-tts==6.1.12  # Last resort fallback
+
+# Audio Processing
+soundfile==0.12.1
+librosa==0.10.2
+av==12.3.0  # For audio/video handling
+
+# Face Recognition (InsightFace - 99.8% accuracy)
+insightface==0.7.3
+onnxruntime==1.20.0
+opencv-python-headless==4.10.0.84
+
+# Liveness Detection (Blink detection)
+mediapipe==0.10.18
+
+# Image Processing
+Pillow==10.4.0
+numpy==1.26.4
+scikit-learn==1.5.2
+
+# Database
+supabase==2.10.0
+
+# Utilities
+python-dotenv==1.0.1
+httpx==0.27.2
+pydantic==2.9.0
+
+# Modal.com deployment (pay-per-second GPU)
+modal==0.66.0

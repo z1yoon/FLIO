@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "FLIO",
+    "slug": "flio",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "flio",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "splash": {
+      "backgroundColor": "#0077B6"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.flio.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FLIO needs camera access for face verification to ensure authentic profiles.",
+        "NSMicrophoneUsageDescription": "FLIO needs microphone access for voice input during profile creation.",
+        "NSSpeechRecognitionUsageDescription": "FLIO uses speech recognition for voice-based profile creation."
+      }
+    },
+    "android": {
+      "package": "app.flio.mobile",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}
