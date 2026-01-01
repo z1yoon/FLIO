@@ -9,12 +9,12 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { FLIOAlertAPI } from '../../components/FLIOAlert';
 
 const { width } = Dimensions.get('window');
 
@@ -54,11 +54,11 @@ export default function PasswordSetupScreen() {
 
   const validatePassword = () => {
     if (password.length < 6) {
-      Alert.alert('비밀번호 오류', '비밀번호는 최소 6자리 이상이어야 합니다.');
+      FLIOAlertAPI.alert('비밀번호 오류', '비밀번호는 최소 6자리 이상이어야 합니다.');
       return false;
     }
     if (password !== confirmPassword) {
-      Alert.alert('비밀번호 오류', '비밀번호가 일치하지 않습니다.');
+      FLIOAlertAPI.alert('비밀번호 오류', '비밀번호가 일치하지 않습니다.');
       return false;
     }
     return true;
@@ -75,7 +75,7 @@ export default function PasswordSetupScreen() {
       // Simulate account creation
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Navigate to face verification with all user data
+      // Show success popup before navigating
       const faceVerificationParams = new URLSearchParams({
         userId: params.userId as string,
         name: userName,
@@ -87,11 +87,22 @@ export default function PasswordSetupScreen() {
         di: params.di as string
       });
       
-      router.push(`/(onboarding)/face-verification?${faceVerificationParams.toString()}`);
+      FLIOAlertAPI.alert(
+        '계정 생성 완료',
+        '계정이 성공적으로 생성되었습니다.',
+        [
+          {
+            text: '확인',
+            onPress: () => {
+              router.push(`/(onboarding)/face-verification?${faceVerificationParams.toString()}`);
+            }
+          }
+        ]
+      );
       
     } catch (error) {
       console.error('Account creation error:', error);
-      Alert.alert('계정 생성 오류', '계정 생성 중 문제가 발생했습니다.');
+      FLIOAlertAPI.alert('계정 생성 오류', '계정 생성 중 문제가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }

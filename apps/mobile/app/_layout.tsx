@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
+import { FLIOAlertProvider } from '../components/FLIOAlert';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -13,7 +14,7 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <>
+    <FLIOAlertProvider>
       <StatusBar style="light" backgroundColor="transparent" translucent />
       <Stack
         screenOptions={{
@@ -27,6 +28,6 @@ export default function RootLayout() {
         <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
         <Stack.Screen name="(main)" options={{ headerShown: false }} />
       </Stack>
-    </>
+    </FLIOAlertProvider>
   );
 }

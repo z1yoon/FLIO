@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   Dimensions,
   Animated,
-  Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { FLIOAlertAPI, FLIOAlertButton } from '../../components/FLIOAlert';
 
 const { width, height } = Dimensions.get('window');
 
@@ -63,7 +63,7 @@ export default function FaceVerificationScreen() {
 
   const handleUploadPhoto = () => {
     // TODO: Implement actual photo picker
-    Alert.alert(
+    FLIOAlertAPI.alert(
       '사진 업로드',
       '프로필에 사용할 사진을 선택해주세요',
       [
@@ -82,7 +82,7 @@ export default function FaceVerificationScreen() {
 
   const handleLiveCapture = () => {
     // TODO: Implement actual camera capture with liveness detection
-    Alert.alert(
+    FLIOAlertAPI.alert(
       '실시간 촬영',
       '얼굴이 화면에 잘 보이게 해주세요\n잠시 후 자동으로 촬영됩니다',
       [
@@ -413,6 +413,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   iconContainer: {
     marginBottom: 24,

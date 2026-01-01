@@ -9,7 +9,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -21,6 +20,7 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { FLIOAlertAPI } from '../../components/FLIOAlert';
 
 interface KoreanIdentityData {
   name: string;        // 실명
@@ -167,7 +167,7 @@ export default function PhoneVerificationScreen() {
 
   const handleSendCode = async () => {
     if (!isValidPhoneNumber(phoneNumber)) {
-      Alert.alert('알림', '올바른 휴대폰 번호를 입력해주세요.\n(010-XXXX-XXXX 형식)');
+      FLIOAlertAPI.alert('알림', '올바른 휴대폰 번호를 입력해주세요.\n(010-XXXX-XXXX 형식)');
       return;
     }
 
@@ -176,7 +176,7 @@ export default function PhoneVerificationScreen() {
       const cleanPhone = phoneNumber.replace(/\D/g, '');
       const result = await phoneVerificationService.sendCode(cleanPhone);
       
-      Alert.alert('인증번호 전송', '인증번호를 전송했습니다.');
+      FLIOAlertAPI.alert('인증번호 전송', '인증번호를 전송했습니다.');
       setStep('verify');
       setCountdown(600); // 10 minutes
       setVerificationCode('');
@@ -198,7 +198,7 @@ export default function PhoneVerificationScreen() {
       ]).start();
       
     } catch (error: any) {
-      Alert.alert('오류', error.message);
+      FLIOAlertAPI.alert('오류', error.message);
     } finally {
       setLoading(false);
     }
@@ -206,7 +206,7 @@ export default function PhoneVerificationScreen() {
 
   const handleVerifyCode = async () => {
     if (verificationCode.length !== 6) {
-      Alert.alert('알림', '인증번호 6자리를 모두 입력해주세요.');
+      FLIOAlertAPI.alert('알림', '인증번호 6자리를 모두 입력해주세요.');
       return;
     }
 
@@ -219,7 +219,7 @@ export default function PhoneVerificationScreen() {
         setUserId(result.user_id);
         const identityData = result.identity_data;
         
-        Alert.alert(
+        FLIOAlertAPI.alert(
           '본인인증 완료', 
           `${identityData.name}님 (${identityData.age}세) 환영합니다!`, 
           [
@@ -245,7 +245,7 @@ export default function PhoneVerificationScreen() {
       }
       
     } catch (error: any) {
-      Alert.alert('인증 실패', error.message);
+      FLIOAlertAPI.alert('인증 실패', error.message);
       setVerificationCode('');
       // Clear all inputs
       codeInputRefs.current.forEach(ref => ref?.clear());
@@ -281,10 +281,10 @@ export default function PhoneVerificationScreen() {
     try {
       const cleanPhone = phoneNumber.replace(/\D/g, '');
       await phoneVerificationService.sendCode(cleanPhone);
-      Alert.alert('재전송 완료', '인증번호를 다시 전송했습니다.');
+      FLIOAlertAPI.alert('재전송 완료', '인증번호를 다시 전송했습니다.');
       setCountdown(600);
     } catch (error: any) {
-      Alert.alert('오류', error.message);
+      FLIOAlertAPI.alert('오류', error.message);
     } finally {
       setLoading(false);
     }

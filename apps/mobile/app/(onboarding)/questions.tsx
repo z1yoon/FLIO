@@ -11,7 +11,6 @@ import {
   Platform,
   ScrollView,
   Image,
-  Alert,
   AccessibilityInfo,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -19,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { aiQuestionService, Question, UserContext, Answer } from '../../services/aiQuestionService';
+import { FLIOAlertAPI } from '../../components/FLIOAlert';
 
 const { width, height } = Dimensions.get('window');
 
@@ -87,7 +87,7 @@ export default function QuestionsScreen() {
       setQuestions(initialQuestions); // All 48 questions from backend
     } catch (error) {
       console.error('❌ Failed to load initial questions:', error);
-      Alert.alert('연결 오류', 'AI 서비스 연결에 문제가 있습니다. 다시 시도해주세요.');
+      FLIOAlertAPI.alert('연결 오류', 'AI 서비스 연결에 문제가 있습니다. 다시 시도해주세요.');
     } finally {
       setIsLoadingQuestion(false);
     }
@@ -133,7 +133,7 @@ export default function QuestionsScreen() {
 
     } catch (error) {
       console.error('Failed to process answer:', error);
-      Alert.alert('오류', '답변 처리 중 문제가 발생했습니다.');
+      FLIOAlertAPI.alert('오류', '답변 처리 중 문제가 발생했습니다.');
     } finally {
       setIsLoadingQuestion(false);
     }
