@@ -6,7 +6,9 @@
       "Bash(mkdir:*)",
       "Bash(tail:*)",
       "Bash(npx expo install:*)",
-      "Bash(pod install:*)"
+      "Bash(pod install:*)",
+      "Bash(rm:*)",
+      "Bash(rg:*)"
     ],
     "deny": []
   }
