@@ -396,5 +396,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
 });

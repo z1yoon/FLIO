@@ -247,6 +247,8 @@ export default function QuestionsScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={true}
       >
         {/* Progress Bar */}
         <View style={styles.progressContainer}>
@@ -463,7 +465,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   scrollContent: {
-    flexGrow: 1,
     paddingTop: 120,
     paddingBottom: 40,
   },
@@ -495,19 +496,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   avatarSection: {
-    height: height * 0.25,
+    height: height * 0.22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   avatarContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   imageContainer: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
     overflow: 'hidden',
     backgroundColor: 'transparent',
     shadowColor: 'rgba(79, 209, 199, 0.8)',
@@ -517,9 +518,9 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   managerImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
   },
   managerPlaceholder: {
     alignItems: 'center',
@@ -563,21 +564,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   questionText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
-    lineHeight: 32,
+    lineHeight: 28,
     textAlign: 'center',
   },
   optionsContainer: {
     paddingHorizontal: 24,
-    gap: 12,
+    paddingBottom: 20,
+    gap: 10,
   },
   optionButton: {
     backgroundColor: 'transparent',
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 22,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.6)',
   },
@@ -586,7 +588,7 @@ const styles = StyleSheet.create({
     borderColor: '#4FD1C7',
   },
   optionText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#FFFFFF',
     textAlign: 'center',
   },
