@@ -12,6 +12,7 @@ import {
   ScrollView,
   Image,
   Alert,
+  AccessibilityInfo,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -50,13 +51,17 @@ export default function QuestionsScreen() {
   
   // AI-driven state management
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
+    // If coming back from complete page, start at the specified index
+    const backIndex = params.currentQuestionIndex as string;
+    return backIndex ? parseInt(backIndex) : 0;
+  });
   const [userContext, setUserContext] = useState<UserContext>(() => createUserContext(userId));
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(true);
   const [textAnswer, setTextAnswer] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(true);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -114,8 +119,16 @@ export default function QuestionsScreen() {
         // Move to next question
         setCurrentQuestionIndex(currentQuestionIndex + 1);
       } else {
-        // All questions completed, go directly to matching
-        router.replace('/(main)');
+        // All questions completed, redirect to onboarding complete with all params
+        router.replace({
+          pathname: '/(onboarding)/complete',
+          params: { 
+            userId: userId,
+            name: userName,
+            age: userAge,
+            gender: userGender
+          }
+        });
       }
 
     } catch (error) {
@@ -128,6 +141,11 @@ export default function QuestionsScreen() {
 
   // Initialize questions when component mounts
   useEffect(() => {
+    // Check screen reader status
+    AccessibilityInfo.isScreenReaderEnabled().then(screenReaderEnabled => {
+      setIsScreenReaderEnabled(screenReaderEnabled);
+    });
+    
     loadInitialQuestions();
   }, []);
 
@@ -175,17 +193,11 @@ export default function QuestionsScreen() {
   };
 
   const handleVoiceInput = () => {
-    if (!isVoiceMode) return;
+    if (!isScreenReaderEnabled) return;
     setIsListening(!isListening);
     // TODO: Implement actual voice recognition
   };
 
-  const toggleVoiceMode = () => {
-    setIsVoiceMode(!isVoiceMode);
-    if (isListening) {
-      setIsListening(false);
-    }
-  };
 
   const handleNext = async () => {
     if (textAnswer.trim() && !isLoadingQuestion) {
@@ -231,18 +243,6 @@ export default function QuestionsScreen() {
           <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
-        {/* Voice Mode Toggle */}
-        <TouchableOpacity
-          style={[styles.voiceModeButton, isVoiceMode && styles.voiceModeButtonActive]}
-          onPress={toggleVoiceMode}
-          activeOpacity={0.7}
-        >
-          <Ionicons 
-            name={isVoiceMode ? "volume-high" : "volume-mute"} 
-            size={20} 
-            color={isVoiceMode ? "#4FD1C7" : "#FFFFFF"} 
-          />
-        </TouchableOpacity>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -250,7 +250,12 @@ export default function QuestionsScreen() {
       >
         {/* Progress Bar */}
         <View style={styles.progressContainer}>
-          <Text style={styles.progressText}>
+          <Text 
+            style={styles.progressText}
+            accessible={true}
+            accessibilityRole="text"
+            accessibilityLabel={`진행률: ${questions.length}개 질문 중 ${currentQuestionIndex + 1}번째`}
+          >
             {currentQuestionIndex + 1} / {questions.length}
           </Text>
           <View style={styles.progressBar}>
@@ -287,8 +292,22 @@ export default function QuestionsScreen() {
         <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
           {currentQuestion ? (
             <>
-              <Text style={styles.categoryLabel}>{getCategoryLabel(currentQuestion.category)}</Text>
-              <Text style={styles.questionText}>{currentQuestion.text}</Text>
+              <Text 
+                style={styles.categoryLabel}
+                accessible={true}
+                accessibilityRole="text"
+                accessibilityLabel={`카테고리: ${getCategoryLabel(currentQuestion.category)}`}
+              >
+                {getCategoryLabel(currentQuestion.category)}
+              </Text>
+              <Text 
+                style={styles.questionText}
+                accessible={true}
+                accessibilityRole="text"
+                accessibilityLabel={`질문: ${currentQuestion.text}`}
+              >
+                {currentQuestion.text}
+              </Text>
             </>
           ) : isLoadingQuestion ? (
             <>
@@ -316,6 +335,10 @@ export default function QuestionsScreen() {
                 onPress={() => handleChoiceSelect(option)}
                 disabled={isLoadingQuestion}
                 activeOpacity={0.7}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={`답변 선택: ${option}`}
+                accessibilityHint="이 답변을 선택하려면 두 번 탭하세요"
               >
                 <Text
                   style={[
@@ -346,11 +369,18 @@ export default function QuestionsScreen() {
               placeholderTextColor="rgba(255, 255, 255, 0.4)"
               multiline
               editable={!isLoadingQuestion}
+              accessible={true}
+              accessibilityLabel="텍스트 답변 입력"
+              accessibilityHint="여기에 자세한 답변을 입력하세요"
             />
             <TouchableOpacity
               style={styles.sendButton}
               onPress={handleNext}
               disabled={!textAnswer.trim() || isLoadingQuestion}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="답변 전송"
+              accessibilityHint="작성한 답변을 전송하고 다음 질문으로 넘어갑니다"
             >
               <Ionicons
                 name="send"
@@ -361,12 +391,16 @@ export default function QuestionsScreen() {
           </View>
         )}
 
-        {/* Voice Input Button - Only show when voice mode is enabled */}
-        {isVoiceMode && (
+        {/* Voice Input Button - Show only for screen reader users */}
+        {isScreenReaderEnabled && (
           <TouchableOpacity
             style={[styles.voiceButton, isListening && styles.voiceButtonActive]}
             onPress={handleVoiceInput}
             activeOpacity={0.7}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="음성으로 답변하기"
+            accessibilityHint="음성 입력을 시작하려면 두 번 탭하세요"
           >
             <Ionicons
               name={isListening ? 'mic' : 'mic-outline'}
@@ -422,11 +456,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   scrollContent: {
     flexGrow: 1,
@@ -629,23 +663,5 @@ const styles = StyleSheet.create({
   textInputDisabled: {
     opacity: 0.6,
     color: 'rgba(255, 255, 255, 0.5)',
-  },
-  voiceModeButton: {
-    position: 'absolute',
-    top: 60,
-    right: 20,
-    zIndex: 10,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
-  },
-  voiceModeButtonActive: {
-    backgroundColor: 'rgba(79, 209, 199, 0.3)',
-    borderColor: '#4FD1C7',
   },
 });

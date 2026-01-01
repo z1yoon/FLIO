@@ -6,8 +6,10 @@ import {
   TouchableOpacity,
   Dimensions,
   Animated,
+  ScrollView,
+  SafeAreaView,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -20,6 +22,7 @@ const { width } = Dimensions.get('window');
  * Shows their verification badges and next steps
  */
 export default function CompleteScreen() {
+  const params = useLocalSearchParams();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const confettiAnim = useRef(new Animated.Value(0)).current;
@@ -56,11 +59,13 @@ export default function CompleteScreen() {
   }, []);
 
   const handleStart = () => {
-    router.replace('/(main)');
+    // TODO: Replace with actual main app screen when available
+    router.replace('/');
   };
 
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* FLIO Ocean Gradient Background */}
       <LinearGradient
         colors={['#2E7D7A', '#4FD1C7', '#7EDDD9', '#B0E7E4']}
@@ -68,22 +73,28 @@ export default function CompleteScreen() {
         style={styles.backgroundGradient}
       />
       
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
+
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
         {/* Success Icon */}
         <View style={styles.iconContainer}>
           <LinearGradient
             colors={['#00FFC8', '#00D4AA', '#00B894']}
             style={styles.iconGradient}
           >
-            <Ionicons name="checkmark" size={64} color="#000000" />
+            <Ionicons name="checkmark" size={48} color="#FFFFFF" />
           </LinearGradient>
         </View>
 
@@ -142,18 +153,6 @@ export default function CompleteScreen() {
           </View>
         </View>
 
-        {/* Stats Preview */}
-        <View style={styles.statsSection}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>89%</Text>
-            <Text style={styles.statLabel}>프로필 완성도</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>47</Text>
-            <Text style={styles.statLabel}>잠재 매칭</Text>
-          </View>
-        </View>
 
         {/* CTA Button */}
         <TouchableOpacity
@@ -171,8 +170,9 @@ export default function CompleteScreen() {
             <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
           </LinearGradient>
         </TouchableOpacity>
-      </Animated.View>
-    </View>
+        </Animated.View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -180,132 +180,110 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#2E7D7A',
-    paddingTop: 60,
   },
   backgroundGradient: {
     ...StyleSheet.absoluteFillObject,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: 80,
+    paddingBottom: 40,
+  },
+  content: {
     paddingHorizontal: 24,
     alignItems: 'center',
   },
   iconContainer: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   iconGradient: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
   },
   badgesSection: {
     width: '100%',
-    marginTop: 32,
+    marginTop: 20,
   },
   badgesTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#00FFC8',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   badgeItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
   },
   badgeItemLocked: {
     opacity: 0.6,
   },
   badgeIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(0, 255, 200, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   badgeInfo: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 12,
   },
   badgeName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
     marginBottom: 2,
   },
   badgeDescription: {
-    fontSize: 13,
+    fontSize: 11,
     color: 'rgba(255, 255, 255, 0.5)',
   },
   badgeNameLocked: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.5)',
     marginBottom: 2,
   },
   badgeDescriptionLocked: {
-    fontSize: 13,
+    fontSize: 11,
     color: 'rgba(255, 255, 255, 0.3)',
-  },
-  statsSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 24,
-    paddingVertical: 20,
-    paddingHorizontal: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 20,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#00FFC8',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 4,
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   startButton: {
     width: '100%',
-    marginTop: 32,
+    marginTop: 20,
   },
   startButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
+    paddingVertical: 16,
     borderRadius: 30,
     gap: 8,
   },
   startButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
   },

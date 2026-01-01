@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import * as Speech from 'expo-speech';
+import { AccessibilityInfo } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,7 +31,7 @@ export default function AvatarIntroScreen() {
   const userGender = params.gender as string;
   
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false);
   
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -39,7 +40,7 @@ export default function AvatarIntroScreen() {
 
   const introMessage = {
     text: '나에게 딱 맞는 인연을 찾기위한 프로필 작성 시작합니다',
-    subtitle: '음성도움이 필요하면 음성모드를 눌러주세요',
+    subtitle: '포기하지말고 끝까지 응답해주세요',
   };
 
   // Process steps to show
@@ -50,6 +51,15 @@ export default function AvatarIntroScreen() {
   ];
 
   useEffect(() => {
+    // Check if screen reader is enabled
+    AccessibilityInfo.isScreenReaderEnabled().then(screenReaderEnabled => {
+      setIsScreenReaderEnabled(screenReaderEnabled);
+      if (screenReaderEnabled) {
+        // Auto-play intro message for screen reader users
+        playIntroSpeech();
+      }
+    });
+
     // Initial entrance animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -100,19 +110,6 @@ export default function AvatarIntroScreen() {
     }
   };
 
-  const toggleVoiceMode = () => {
-    if (isSpeaking) {
-      Speech.stop();
-      setIsSpeaking(false);
-    }
-    
-    const newVoiceMode = !isVoiceMode;
-    setIsVoiceMode(newVoiceMode);
-    
-    if (newVoiceMode) {
-      playIntroSpeech();
-    }
-  };
 
   const handleNext = () => {
     // Navigate to questions with all user data
@@ -205,25 +202,34 @@ export default function AvatarIntroScreen() {
 
         {/* Introduction Text */}
         <View style={styles.textContainer}>
-          <Text style={styles.introText}>{introMessage.text}</Text>
-          <Text style={styles.subtitleText}>{introMessage.subtitle}</Text>
+          <Text 
+            style={styles.introText}
+            accessible={true}
+            accessibilityRole="text"
+            accessibilityLabel={introMessage.text}
+          >
+            {introMessage.text}
+          </Text>
+          <Text 
+            style={styles.subtitleText}
+            accessible={true}
+            accessibilityRole="text"
+            accessibilityLabel={introMessage.subtitle}
+          >
+            {introMessage.subtitle}
+          </Text>
         </View>
 
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={styles.voiceActionButton}
-            onPress={toggleVoiceMode}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="volume-high" size={20} color="#FFFFFF" />
-            <Text style={styles.voiceActionText}>음성모드</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={styles.nextButton}
             onPress={handleNext}
             activeOpacity={0.8}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="다음 단계로 이동"
+            accessibilityHint="프로필 작성 질문으로 넘어갑니다"
           >
             <LinearGradient
               colors={['#00FFC8', '#00D4AA']}
@@ -372,31 +378,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   buttonContainer: {
-    flexDirection: 'row',
-    gap: 16,
     width: '100%',
     paddingBottom: 40,
-    alignItems: 'stretch',
-  },
-  voiceActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    borderRadius: 30,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
-    gap: 8,
-    flex: 1,
-  },
-  voiceActionText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
   nextButton: {
-    flex: 1,
+    width: '100%',
   },
   gradientButton: {
     flexDirection: 'row',
