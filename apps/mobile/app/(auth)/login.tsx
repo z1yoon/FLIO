@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +39,8 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <LinearGradient
-        colors={['#0A0A0A', '#1A0A2E', '#0A0A0A']}
+        colors={['#2E7D7A', '#4FD1C7', '#7EDDD9', '#B0E7E4']}
+        locations={[0, 0.4, 0.7, 1]}
         style={styles.gradient}
       />
 
@@ -64,14 +65,14 @@ export default function LoginScreen() {
         {/* Form */}
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color="rgba(255,255,255,0.5)" />
+            <Ionicons name="phone-portrait-outline" size={20} color="rgba(255,255,255,0.5)" />
             <TextInput
               style={styles.input}
-              placeholder="이메일"
+              placeholder="휴대폰 번호"
               placeholderTextColor="rgba(255,255,255,0.4)"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              keyboardType="phone-pad"
               autoCapitalize="none"
             />
           </View>
@@ -100,18 +101,18 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.loginButton}
+            style={styles.primaryButton}
             onPress={handleLogin}
             disabled={isLoading}
-            activeOpacity={0.9}
+            activeOpacity={0.8}
           >
             <LinearGradient
               colors={['#00FFC8', '#00D4AA']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={styles.loginButtonGradient}
+              style={styles.gradientButton}
             >
-              <Text style={styles.loginButtonText}>
+              <Text style={styles.primaryButtonText}>
                 {isLoading ? '로그인 중...' : '로그인'}
               </Text>
             </LinearGradient>
@@ -148,7 +149,7 @@ export default function LoginScreen() {
             onPress={() => handleSocialLogin('kakao')}
           >
             <Text style={styles.kakaoIcon}>💬</Text>
-            <Text style={[styles.socialButtonText, { color: '#000000' }]}>
+            <Text style={[styles.socialButtonText, { color: '#FFFFFF' }]}>
               카카오로 계속하기
             </Text>
           </TouchableOpacity>
@@ -157,7 +158,7 @@ export default function LoginScreen() {
         {/* Sign Up Link */}
         <View style={styles.signUpSection}>
           <Text style={styles.signUpText}>계정이 없으신가요? </Text>
-          <TouchableOpacity onPress={() => router.push('/(onboarding)/avatar-intro')}>
+          <TouchableOpacity onPress={() => router.push('/(onboarding)/phone-verification')}>
             <Text style={styles.signUpLink}>가입하기</Text>
           </TouchableOpacity>
         </View>
@@ -169,7 +170,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: '#2E7D7A',
   },
   gradient: {
     ...StyleSheet.absoluteFillObject,
@@ -184,10 +185,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   header: {
     marginBottom: 40,
@@ -195,7 +198,7 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#00FFC8',
+    color: '#FFFFFF',
     letterSpacing: 4,
     marginBottom: 8,
   },
@@ -210,13 +213,13 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'transparent',
     borderRadius: 16,
     paddingHorizontal: 16,
     height: 56,
     gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
   },
   input: {
     flex: 1,
@@ -228,22 +231,22 @@ const styles = StyleSheet.create({
   },
   forgotText: {
     fontSize: 14,
-    color: '#00FFC8',
+    color: '#FFFFFF',
   },
-  loginButton: {
+  primaryButton: {
     marginTop: 8,
-    borderRadius: 28,
-    overflow: 'hidden',
+    width: '100%',
+    backgroundColor: 'transparent',
   },
-  loginButtonGradient: {
-    height: 56,
+  gradientButton: {
+    paddingVertical: 18,
+    borderRadius: 30,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  loginButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#000000',
+  primaryButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   divider: {
     flexDirection: 'row',
@@ -258,7 +261,7 @@ const styles = StyleSheet.create({
   dividerText: {
     paddingHorizontal: 16,
     fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(255,255,255,0.8)',
   },
   socialButtons: {
     gap: 12,
@@ -273,13 +276,13 @@ const styles = StyleSheet.create({
   },
   appleButton: {
     backgroundColor: '#000000',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
   },
   googleButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
   },
   kakaoButton: {
     backgroundColor: '#FEE500',
@@ -299,11 +302,11 @@ const styles = StyleSheet.create({
   },
   signUpText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
+    color: '#FFFFFF',
   },
   signUpLink: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#00FFC8',
+    color: '#FFFFFF',
   },
 });

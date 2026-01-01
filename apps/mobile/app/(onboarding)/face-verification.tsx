@@ -8,7 +8,7 @@ import {
   Animated,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -26,6 +26,7 @@ type VerificationStep = 'intro' | 'photo_upload' | 'live_capture' | 'processing'
  * 4. Show verification result
  */
 export default function FaceVerificationScreen() {
+  const params = useLocalSearchParams();
   const [step, setStep] = useState<VerificationStep>('intro');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [livePhoto, setLivePhoto] = useState<string | null>(null);
@@ -107,7 +108,18 @@ export default function FaceVerificationScreen() {
   };
 
   const handleComplete = () => {
-    router.push('/(onboarding)/complete');
+    // Navigate to avatar intro with user data from previous screens
+    const avatarParams = new URLSearchParams({
+      userId: params.userId as string,
+      name: params.name as string,
+      age: params.age as string,
+      gender: params.gender as string,
+      birthDate: params.birthDate as string,
+      phone: params.phone as string,
+      ci: params.ci as string,
+      di: params.di as string
+    });
+    router.push(`/(onboarding)/avatar-intro?${avatarParams.toString()}`);
   };
 
   const handleRetry = () => {
@@ -168,12 +180,6 @@ export default function FaceVerificationScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.skipButton}
-              onPress={() => router.push('/(onboarding)/complete')}
-            >
-              <Text style={styles.skipText}>나중에 하기</Text>
-            </TouchableOpacity>
           </Animated.View>
         );
 
@@ -344,6 +350,13 @@ export default function FaceVerificationScreen() {
 
   return (
     <View style={styles.container}>
+      {/* FLIO Ocean Gradient Background */}
+      <LinearGradient
+        colors={['#2E7D7A', '#4FD1C7', '#7EDDD9', '#B0E7E4']}
+        locations={[0, 0.4, 0.7, 1]}
+        style={styles.backgroundGradient}
+      />
+      
       {/* Back Button */}
       <TouchableOpacity
         style={styles.backButton}
@@ -375,8 +388,11 @@ export default function FaceVerificationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#2E7D7A',
     paddingTop: 60,
+  },
+  backgroundGradient: {
+    ...StyleSheet.absoluteFillObject,
   },
   stepIndicator: {
     flexDirection: 'row',
@@ -388,7 +404,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
   stepDotActive: {
     backgroundColor: '#00FFC8',
@@ -438,15 +454,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000000',
-  },
-  skipButton: {
-    marginTop: 20,
-    padding: 12,
-  },
-  skipText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: '#FFFFFF',
   },
   stepTitle: {
     fontSize: 24,
@@ -463,10 +471,10 @@ const styles = StyleSheet.create({
   uploadBox: {
     width: width - 80,
     height: width - 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'transparent',
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
@@ -502,8 +510,10 @@ const styles = StyleSheet.create({
   cameraPreview: {
     width: width - 80,
     height: width - 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'transparent',
     borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -615,9 +625,9 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    backgroundColor: 'rgba(0, 255, 200, 0.1)',
+    backgroundColor: 'transparent',
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#00FFC8',
   },
   badgeText: {
@@ -645,8 +655,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 48,
     borderRadius: 30,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   retryButtonText: {
     fontSize: 16,
@@ -657,13 +668,13 @@ const styles = StyleSheet.create({
     top: 60,
     left: 20,
     zIndex: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 255, 200, 0.1)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 255, 200, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
 });

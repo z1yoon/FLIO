@@ -44,8 +44,8 @@ export default function AvatarIntroScreen() {
 
   // Process steps to show
   const processSteps = [
-    { icon: 'person-outline', text: '프로필작성', active: true },
     { icon: 'shield-checkmark-outline', text: '얼굴인증', active: false },
+    { icon: 'person-outline', text: '프로필작성', active: true },
     { icon: 'heart', text: '매칭시작', active: false }
   ];
 
@@ -225,8 +225,15 @@ export default function AvatarIntroScreen() {
             onPress={handleNext}
             activeOpacity={0.8}
           >
-            <Text style={styles.nextButtonText}>다음</Text>
-            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+            <LinearGradient
+              colors={['#00FFC8', '#00D4AA']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.gradientButton}
+            >
+              <Text style={styles.nextButtonText}>다음</Text>
+              <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -269,11 +276,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   processSteps: {
     flexDirection: 'row',
@@ -366,21 +373,22 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
     width: '100%',
     paddingBottom: 40,
+    alignItems: 'stretch',
   },
   voiceActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
     paddingVertical: 18,
     borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     gap: 8,
+    flex: 1,
   },
   voiceActionText: {
     fontSize: 16,
@@ -388,26 +396,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   nextButton: {
+    flex: 1,
+  },
+  gradientButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
     paddingVertical: 18,
     borderRadius: 30,
-    backgroundColor: 'rgba(79, 209, 199, 0.9)',
     gap: 8,
-    shadowColor: 'rgba(0, 0, 0, 0.2)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
   nextButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#FFFFFF',
-    textShadowColor: 'rgba(47, 125, 122, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
 });

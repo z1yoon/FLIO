@@ -237,7 +237,7 @@ export default function PhoneVerificationScreen() {
                   ci: identityData.ci,
                   di: identityData.di
                 });
-                router.push(`/(onboarding)/avatar-intro?${params.toString()}`);
+                router.push(`/(onboarding)/password-setup?${params.toString()}`);
               }
             }
           ]
@@ -359,10 +359,18 @@ export default function PhoneVerificationScreen() {
                   ]}
                   onPress={handleSendCode}
                   disabled={!isValidPhoneNumber(phoneNumber) || loading}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.buttonText}>
-                    {loading ? '전송 중...' : '인증번호 받기'}
-                  </Text>
+                  <LinearGradient
+                    colors={['#00FFC8', '#00D4AA']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientButton}
+                  >
+                    <Text style={styles.buttonText}>
+                      {loading ? '전송 중...' : '인증번호 받기'}
+                    </Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               </>
             ) : (
@@ -418,10 +426,18 @@ export default function PhoneVerificationScreen() {
                     ]}
                     onPress={handleVerifyCode}
                     disabled={verificationCode.length !== 6 || loading}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.buttonText}>
-                      {loading ? '인증 중...' : '인증 완료'}
-                    </Text>
+                    <LinearGradient
+                      colors={['#00FFC8', '#00D4AA']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.gradientButton}
+                    >
+                      <Text style={styles.buttonText}>
+                        {loading ? '인증 중...' : '인증 완료'}
+                      </Text>
+                    </LinearGradient>
                   </TouchableOpacity>
                 </View>
               </>
@@ -449,11 +465,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   keyboardView: {
     flex: 1,
@@ -506,13 +522,13 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   phoneInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'transparent',
     borderRadius: 25,
     padding: 18,
     fontSize: 18,
     color: '#FFFFFF',
     borderWidth: 2,
-    borderColor: 'rgba(79, 209, 199, 0.6)',
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     letterSpacing: 2,
     fontWeight: '600',
@@ -527,13 +543,13 @@ const styles = StyleSheet.create({
   codeInput: {
     width: 45,
     height: 55,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'transparent',
     borderRadius: 8,
     fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   countdown: {
     fontSize: 16,
@@ -542,29 +558,24 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   button: {
-    backgroundColor: 'rgba(79, 209, 199, 0.9)',
-    borderRadius: 25,
-    paddingVertical: 18,
-    paddingHorizontal: 32,
     width: '100%',
-    alignItems: 'center',
     marginBottom: 16,
-    shadowColor: 'rgba(0, 0, 0, 0.2)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: 'transparent',
+  },
+  gradientButton: {
+    paddingVertical: 18,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    opacity: 0.6,
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textShadowColor: 'rgba(47, 125, 122, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   buttonGroup: {
     width: '100%',
@@ -573,7 +584,7 @@ const styles = StyleSheet.create({
   resendButton: {
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: 'rgba(79, 209, 199, 0.6)',
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 25,
     paddingVertical: 14,
     paddingHorizontal: 32,
@@ -586,12 +597,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   devHint: {
-    backgroundColor: 'rgba(79, 209, 199, 0.15)',
+    backgroundColor: 'transparent',
     borderRadius: 15,
     padding: 12,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(79, 209, 199, 0.4)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   devHintText: {
     color: '#FFFFFF',

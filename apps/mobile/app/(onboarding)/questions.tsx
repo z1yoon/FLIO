@@ -56,6 +56,7 @@ export default function QuestionsScreen() {
   const [textAnswer, setTextAnswer] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(true);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -113,8 +114,8 @@ export default function QuestionsScreen() {
         // Move to next question
         setCurrentQuestionIndex(currentQuestionIndex + 1);
       } else {
-        // All questions completed, go to face verification
-        router.push('/(onboarding)/face-verification');
+        // All questions completed, go directly to matching
+        router.replace('/(main)');
       }
 
     } catch (error) {
@@ -174,8 +175,16 @@ export default function QuestionsScreen() {
   };
 
   const handleVoiceInput = () => {
+    if (!isVoiceMode) return;
     setIsListening(!isListening);
     // TODO: Implement actual voice recognition
+  };
+
+  const toggleVoiceMode = () => {
+    setIsVoiceMode(!isVoiceMode);
+    if (isListening) {
+      setIsListening(false);
+    }
   };
 
   const handleNext = async () => {
@@ -220,6 +229,19 @@ export default function QuestionsScreen() {
           activeOpacity={0.7}
         >
           <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        {/* Voice Mode Toggle */}
+        <TouchableOpacity
+          style={[styles.voiceModeButton, isVoiceMode && styles.voiceModeButtonActive]}
+          onPress={toggleVoiceMode}
+          activeOpacity={0.7}
+        >
+          <Ionicons 
+            name={isVoiceMode ? "volume-high" : "volume-mute"} 
+            size={20} 
+            color={isVoiceMode ? "#4FD1C7" : "#FFFFFF"} 
+          />
         </TouchableOpacity>
 
       <ScrollView
@@ -339,21 +361,23 @@ export default function QuestionsScreen() {
           </View>
         )}
 
-        {/* Voice Input Button */}
-        <TouchableOpacity
-          style={[styles.voiceButton, isListening && styles.voiceButtonActive]}
-          onPress={handleVoiceInput}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={isListening ? 'mic' : 'mic-outline'}
-            size={28}
-            color={isListening ? '#FF6B6B' : '#FFFFFF'}
-          />
-          <Text style={styles.voiceButtonText}>
-            {isListening ? '듣는 중...' : '음성으로 답변하기'}
-          </Text>
-        </TouchableOpacity>
+        {/* Voice Input Button - Only show when voice mode is enabled */}
+        {isVoiceMode && (
+          <TouchableOpacity
+            style={[styles.voiceButton, isListening && styles.voiceButtonActive]}
+            onPress={handleVoiceInput}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={isListening ? 'mic' : 'mic-outline'}
+              size={28}
+              color={isListening ? '#FF6B6B' : '#FFFFFF'}
+            />
+            <Text style={styles.voiceButtonText}>
+              {isListening ? '듣는 중...' : '음성으로 답변하기'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -516,12 +540,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   optionButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'transparent',
     borderRadius: 16,
     paddingVertical: 18,
     paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
   },
   optionSelected: {
     backgroundColor: 'rgba(79, 209, 199, 0.15)',
@@ -605,5 +629,23 @@ const styles = StyleSheet.create({
   textInputDisabled: {
     opacity: 0.6,
     color: 'rgba(255, 255, 255, 0.5)',
+  },
+  voiceModeButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+  },
+  voiceModeButtonActive: {
+    backgroundColor: 'rgba(79, 209, 199, 0.3)',
+    borderColor: '#4FD1C7',
   },
 });

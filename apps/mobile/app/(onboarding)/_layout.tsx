@@ -10,9 +10,10 @@ export default function OnboardingLayout() {
       }}
     >
       <Stack.Screen name="phone-verification" />
+      <Stack.Screen name="password-setup" />
+      <Stack.Screen name="face-verification" />
       <Stack.Screen name="avatar-intro" />
       <Stack.Screen name="questions" />
-      <Stack.Screen name="face-verification" />
       <Stack.Screen name="complete" />
     </Stack>
   );

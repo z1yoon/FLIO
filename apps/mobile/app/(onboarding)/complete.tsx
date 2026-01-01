@@ -61,6 +61,13 @@ export default function CompleteScreen() {
 
   return (
     <View style={styles.container}>
+      {/* FLIO Ocean Gradient Background */}
+      <LinearGradient
+        colors={['#2E7D7A', '#4FD1C7', '#7EDDD9', '#B0E7E4']}
+        locations={[0, 0.4, 0.7, 1]}
+        style={styles.backgroundGradient}
+      />
+      
       <Animated.View
         style={[
           styles.content,
@@ -161,7 +168,7 @@ export default function CompleteScreen() {
             style={styles.startButtonGradient}
           >
             <Text style={styles.startButtonText}>매칭 시작하기</Text>
-            <Ionicons name="arrow-forward" size={20} color="#000000" />
+            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
           </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
@@ -172,8 +179,11 @@ export default function CompleteScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#2E7D7A',
     paddingTop: 60,
+  },
+  backgroundGradient: {
+    ...StyleSheet.absoluteFillObject,
   },
   content: {
     flex: 1,
@@ -297,6 +307,6 @@ const styles = StyleSheet.create({
   startButtonText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000000',
+    color: '#FFFFFF',
   },
 });
