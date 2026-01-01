@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 
 
 
@@ -180,11 +181,18 @@ export default function LandingScreen() {
         <Text style={styles.slogan}>전문 AI 매니저가 도와드리는</Text>
         <Text style={styles.sloganSecond}>진정한 만남</Text>
         
-        <TouchableOpacity onPress={handleStart} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>AI 매니저와 시작하기</Text>
+        <TouchableOpacity onPress={handleStart} style={styles.primaryButton} activeOpacity={0.8}>
+          <LinearGradient
+            colors={['rgba(0, 255, 200, 0.3)', 'rgba(0, 212, 170, 0.3)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.gradientButton}
+          >
+            <Text style={styles.primaryButtonText}>AI 매니저와 시작하기</Text>
+          </LinearGradient>
         </TouchableOpacity>
         
-        <TouchableOpacity onPress={handleLogin} style={styles.secondaryButton}>
+        <TouchableOpacity onPress={handleLogin} style={styles.secondaryButton} activeOpacity={0.8}>
           <Text style={styles.secondaryButtonText}>이미 계정이 있어요</Text>
         </TouchableOpacity>
       </Animated.View>
@@ -275,18 +283,20 @@ const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
   primaryButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-    borderRadius: 25,
-    marginBottom: 16,
     width: '100%',
+    marginBottom: 16,
+  },
+  gradientButton: {
+    paddingVertical: 18,
+    paddingHorizontal: 40,
+    borderRadius: 30,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(0, 255, 200, 0.5)',
   },
   primaryButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#FFFFFF',
     fontWeight: '600',
     letterSpacing: 0.5,
