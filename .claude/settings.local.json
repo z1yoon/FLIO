@@ -3,7 +3,10 @@
     "allow": [
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.figma.com)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(tail:*)",
+      "Bash(npx expo install:*)",
+      "Bash(pod install:*)"
     ],
     "deny": []
   }

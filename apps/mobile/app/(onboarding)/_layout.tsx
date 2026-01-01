@@ -5,10 +5,11 @@ export default function OnboardingLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#000000' },
+        contentStyle: { backgroundColor: '#2E7D7A' },
         animation: 'fade',
       }}
     >
+      <Stack.Screen name="phone-verification" />
       <Stack.Screen name="avatar-intro" />
       <Stack.Screen name="questions" />
       <Stack.Screen name="face-verification" />

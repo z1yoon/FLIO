@@ -11,68 +11,48 @@ import {
   Platform,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import { aiQuestionService, Question, UserContext, Answer } from '../../services/aiQuestionService';
 
 const { width, height } = Dimensions.get('window');
 
-interface Question {
-  id: string;
-  text: string;
-  category: string;
-  type: 'text' | 'choice' | 'scale';
-  options?: string[];
-}
+// Generate unique user ID for this session
+const generateUserId = () => `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-// Sample questions from database (will be replaced with API call)
-const INITIAL_QUESTIONS: Question[] = [
-  {
-    id: 'marriage_when',
-    text: '결혼은 언제 하고 싶으세요?',
-    category: '결혼',
-    type: 'choice',
-    options: ['1년 이내', '1-2년 이내', '2-3년 이내', '3-5년 이내', '급하지 않음 (5년 이상)'],
+// Helper to create initial user context
+const createUserContext = (userId: string, previousAnswers: Answer[] = []): UserContext => ({
+  user_id: userId,
+  previous_answers: previousAnswers,
+  demographics: {
+    // Can be populated from registration data
   },
-  {
-    id: 'children_want',
-    text: '자녀를 원하시나요?',
-    category: '결혼',
-    type: 'choice',
-    options: ['네, 반드시 갖고 싶어요', '네, 가능하면 갖고 싶어요', '아니요, 원하지 않아요'],
-  },
-  {
-    id: 'parents_live',
-    text: '결혼 후 부모님과 동거할 의향이 있으세요?',
-    category: '가족',
-    type: 'choice',
-    options: ['네, 처음부터 같이 살고 싶어요', '부모님 건강이 안 좋아지시면 모실 의향 있어요', '아니요, 따로 살고 싶어요'],
-  },
-  {
-    id: 'finance_manage',
-    text: '결혼 후 가계 재정은 어떻게 관리하고 싶으세요?',
-    category: '재정',
-    type: 'choice',
-    options: ['완전 공동 관리 (모든 수입 합쳐서)', '공동 관리 + 개인 용돈 분리', '수입 비율에 따라 생활비 분담', '완전 분리 (각자 관리)'],
-  },
-  {
-    id: 'dual_income',
-    text: '맞벌이에 대해 어떻게 생각하세요?',
-    category: '직장',
-    type: 'choice',
-    options: ['맞벌이 필수 (경제적으로 필요)', '맞벌이 선호 (배우자도 일했으면)', '외벌이 선호 (한 명이 집안일 전담)', '둘 다 괜찮음 (상대 선택 존중)'],
-  },
-];
+});
 
 /**
- * AI Avatar Question Screen
+ * AI Question Screen
  * 
- * The avatar asks adaptive questions and collects user responses
- * Voice input available for convenience
+ * Presents adaptive questions and collects user responses
+ * Uses AI backend for dynamic question generation with conditional logic
  */
 export default function QuestionsScreen() {
+  const params = useLocalSearchParams();
+  const userId = params.userId as string;
+  
+  // Korean identity data from verification
+  const userName = params.name as string;
+  const userAge = params.age as string;
+  const userGender = params.gender as string;
+  
+  // AI-driven state management
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [userContext, setUserContext] = useState<UserContext>(() => createUserContext(userId));
+  const [isLoadingQuestion, setIsLoadingQuestion] = useState(true);
   const [textAnswer, setTextAnswer] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(true);
@@ -80,8 +60,75 @@ export default function QuestionsScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const currentQuestion = INITIAL_QUESTIONS[currentQuestionIndex];
-  const progress = (currentQuestionIndex + 1) / INITIAL_QUESTIONS.length;
+  const currentQuestion = questions[currentQuestionIndex];
+  const progress = questions.length > 0 ? (currentQuestionIndex + 1) / questions.length : 0;
+
+
+  // Load initial questions from AI backend (only after phone verification)
+  const loadInitialQuestions = async () => {
+    try {
+      setIsLoadingQuestion(true);
+      
+      // Check if user came from phone verification
+      if (!params.userId) {
+        console.log('⚠️ No phone verification - redirecting to phone verification');
+        router.replace('/(onboarding)/phone-verification');
+        return;
+      }
+      
+      const initialQuestions = await aiQuestionService.getInitialQuestions();
+      
+      setQuestions(initialQuestions); // All 48 questions from backend
+    } catch (error) {
+      console.error('❌ Failed to load initial questions:', error);
+      Alert.alert('연결 오류', 'AI 서비스 연결에 문제가 있습니다. 다시 시도해주세요.');
+    } finally {
+      setIsLoadingQuestion(false);
+    }
+  };
+
+  // Simple sequential question progression
+  const processAnswerAndGetNext = async (answer: string) => {
+    if (!currentQuestion) return;
+
+    try {
+      setIsLoadingQuestion(true);
+
+      // Store the answer
+      const newAnswer: Answer = {
+        question_id: currentQuestion.id,
+        answer: answer,
+        timestamp: new Date().toISOString(),
+      };
+
+      const updatedContext: UserContext = {
+        ...userContext,
+        previous_answers: [...userContext.previous_answers, newAnswer],
+      };
+
+      setUserContext(updatedContext);
+
+      // Simple progression: go to next question in the array
+      if (currentQuestionIndex < questions.length - 1) {
+        // Move to next question
+        setCurrentQuestionIndex(currentQuestionIndex + 1);
+      } else {
+        // All questions completed, go to face verification
+        router.push('/(onboarding)/face-verification');
+      }
+
+    } catch (error) {
+      console.error('Failed to process answer:', error);
+      Alert.alert('오류', '답변 처리 중 문제가 발생했습니다.');
+    } finally {
+      setIsLoadingQuestion(false);
+    }
+  };
+
+  // Initialize questions when component mounts
+  useEffect(() => {
+    loadInitialQuestions();
+  }, []);
 
 
   useEffect(() => {
@@ -119,18 +166,11 @@ export default function QuestionsScreen() {
     ).start();
   }, [isSpeaking]);
 
-  const handleChoiceSelect = (option: string) => {
-    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: option }));
+  const handleChoiceSelect = async (option: string) => {
+    if (isLoadingQuestion) return;
     
-    // Move to next question
-    setTimeout(() => {
-      if (currentQuestionIndex < INITIAL_QUESTIONS.length - 1) {
-        setCurrentQuestionIndex((prev) => prev + 1);
-      } else {
-        // All questions answered
-        router.push('/(onboarding)/face-verification');
-      }
-    }, 300);
+    // Process the answer through AI service
+    await processAnswerAndGetNext(option);
   };
 
   const handleVoiceInput = () => {
@@ -138,16 +178,13 @@ export default function QuestionsScreen() {
     // TODO: Implement actual voice recognition
   };
 
-  const handleNext = () => {
-    if (textAnswer.trim()) {
-      setAnswers((prev) => ({ ...prev, [currentQuestion.id]: textAnswer }));
+  const handleNext = async () => {
+    if (textAnswer.trim() && !isLoadingQuestion) {
+      const answer = textAnswer.trim();
       setTextAnswer('');
       
-      if (currentQuestionIndex < INITIAL_QUESTIONS.length - 1) {
-        setCurrentQuestionIndex((prev) => prev + 1);
-      } else {
-        router.push('/(onboarding)/face-verification');
-      }
+      // Process the answer through AI service
+      await processAnswerAndGetNext(answer);
     }
   };
 
@@ -162,30 +199,42 @@ export default function QuestionsScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      {/* Back Button */}
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={handleGoBack}
-        activeOpacity={0.7}
+    <View style={styles.container}>
+      <StatusBar style="light" />
+      
+      {/* FLIO Ocean Gradient Background */}
+      <LinearGradient
+        colors={['#2E7D7A', '#4FD1C7', '#7EDDD9', '#B0E7E4']}
+        locations={[0, 0.4, 0.7, 1]}
+        style={styles.backgroundGradient}
+      />
+
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Ionicons name="chevron-back" size={24} color="#4FD1C7" />
-      </TouchableOpacity>
+        {/* Back Button */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={handleGoBack}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
         {/* Progress Bar */}
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+        <View style={styles.progressContainer}>
+          <Text style={styles.progressText}>
+            {currentQuestionIndex + 1} / {questions.length}
+          </Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+          </View>
         </View>
-        <Text style={styles.progressText}>
-          {currentQuestionIndex + 1} / {INITIAL_QUESTIONS.length}
-        </Text>
 
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
@@ -198,8 +247,8 @@ export default function QuestionsScreen() {
             ]}
           >
             <View style={styles.imageContainer}>
-              <Image 
-                source={require('./intro-manger.png')}
+              <Image
+                source={require('../../assets/images/flio-manager-question.png')}
                 style={styles.managerImage}
                 resizeMode="cover"
               />
@@ -214,56 +263,77 @@ export default function QuestionsScreen() {
 
         {/* Question */}
         <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
-          <Text style={styles.categoryLabel}>{getCategoryLabel(currentQuestion.category)}</Text>
-          <Text style={styles.questionText}>{currentQuestion.text}</Text>
+          {currentQuestion ? (
+            <>
+              <Text style={styles.categoryLabel}>{getCategoryLabel(currentQuestion.category)}</Text>
+              <Text style={styles.questionText}>{currentQuestion.text}</Text>
+            </>
+          ) : isLoadingQuestion ? (
+            <>
+              <Text style={styles.categoryLabel}>AI 질문 생성 중...</Text>
+              <Text style={styles.questionText}>다음 질문을 준비하고 있습니다</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.categoryLabel}>오류</Text>
+              <Text style={styles.questionText}>질문을 불러올 수 없습니다</Text>
+            </>
+          )}
         </Animated.View>
 
         {/* Answer Options */}
-        {currentQuestion.type === 'choice' && currentQuestion.options && (
+        {currentQuestion && currentQuestion.type === 'choice' && currentQuestion.options && (
           <Animated.View style={[styles.optionsContainer, { opacity: fadeAnim }]}>
             {currentQuestion.options.map((option, index) => (
               <TouchableOpacity
                 key={index}
                 style={[
                   styles.optionButton,
-                  answers[currentQuestion.id] === option && styles.optionSelected,
+                  isLoadingQuestion && styles.optionDisabled,
                 ]}
                 onPress={() => handleChoiceSelect(option)}
+                disabled={isLoadingQuestion}
                 activeOpacity={0.7}
               >
                 <Text
                   style={[
                     styles.optionText,
-                    answers[currentQuestion.id] === option && styles.optionTextSelected,
+                    isLoadingQuestion && styles.optionTextDisabled,
                   ]}
                 >
                   {option}
                 </Text>
+                {isLoadingQuestion && (
+                  <View style={styles.loadingOverlay}>
+                    <Text style={styles.loadingText}>처리중...</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </Animated.View>
         )}
 
         {/* Text Input */}
-        {currentQuestion.type === 'text' && (
+        {currentQuestion && currentQuestion.type === 'text' && (
           <View style={styles.inputContainer}>
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput, isLoadingQuestion && styles.textInputDisabled]}
               value={textAnswer}
               onChangeText={setTextAnswer}
               placeholder="답변을 입력해주세요..."
               placeholderTextColor="rgba(255, 255, 255, 0.4)"
               multiline
+              editable={!isLoadingQuestion}
             />
             <TouchableOpacity
               style={styles.sendButton}
               onPress={handleNext}
-              disabled={!textAnswer.trim()}
+              disabled={!textAnswer.trim() || isLoadingQuestion}
             >
               <Ionicons
                 name="send"
                 size={24}
-                color={textAnswer.trim() ? '#4FD1C7' : 'rgba(255, 255, 255, 0.3)'}
+                color={textAnswer.trim() && !isLoadingQuestion ? '#4FD1C7' : 'rgba(255, 255, 255, 0.3)'}
               />
             </TouchableOpacity>
           </View>
@@ -285,13 +355,21 @@ export default function QuestionsScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
-
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
+    결혼: '💍 결혼 계획',
+    가족: '👨‍👩‍👧 가족',
+    재정: '💰 경제',
+    종교: '🕊️ 종교',
+    직장: '💼 직업',
+    라이프스타일: '🏃 라이프스타일',
+    성격: '🎭 성격',
+    접근성: '♿ 접근성',
     marriage: '💍 결혼 계획',
     values: '💎 가치관',
     family: '👨‍👩‍👧 가족',
@@ -304,33 +382,48 @@ function getCategoryLabel(category: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#2E7D7A',
+  },
+  backgroundGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   backButton: {
     position: 'absolute',
     top: 60,
     left: 20,
     zIndex: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(79, 209, 199, 0.1)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(79, 209, 199, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 60,
+    paddingTop: 120,
     paddingBottom: 40,
   },
+  progressContainer: {
+    position: 'absolute',
+    top: 80,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    zIndex: 10,
+  },
   progressBar: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginHorizontal: 24,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 2,
     overflow: 'hidden',
+    width: 60,
+    marginTop: 4,
   },
   progressFill: {
     height: '100%',
@@ -339,9 +432,9 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
-    marginTop: 8,
+    fontWeight: '700',
   },
   avatarSection: {
     height: height * 0.25,
@@ -368,6 +461,20 @@ const styles = StyleSheet.create({
   managerImage: {
     width: 200,
     height: 200,
+    borderRadius: 100,
+  },
+  managerPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  managerLabel: {
+    fontSize: 14,
+    color: '#4FD1C7',
+    fontWeight: '600',
+    marginTop: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   speakingIndicatorOverlay: {
     position: 'absolute',
@@ -394,12 +501,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4FD1C7',
     marginBottom: 8,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   questionText: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#FFFFFF',
-    lineHeight: 36,
+    lineHeight: 32,
+    textAlign: 'center',
   },
   optionsContainer: {
     paddingHorizontal: 24,
@@ -464,5 +574,36 @@ const styles = StyleSheet.create({
   voiceButtonText: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.8)',
+  },
+  // New styles for AI loading states
+  optionDisabled: {
+    opacity: 0.6,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  optionTextDisabled: {
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#4FD1C7',
+    fontWeight: '700',
+    textShadowColor: 'rgba(47, 125, 122, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  textInputDisabled: {
+    opacity: 0.6,
+    color: 'rgba(255, 255, 255, 0.5)',
   },
 });

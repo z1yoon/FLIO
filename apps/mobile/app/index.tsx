@@ -95,7 +95,7 @@ export default function LandingScreen() {
   }, []);
 
   const handleStart = () => {
-    router.push('/(onboarding)/avatar-intro');
+    router.push('/(onboarding)/phone-verification');
   };
 
   const handleLogin = () => {
@@ -275,22 +275,19 @@ const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
   primaryButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingVertical: 16,
     paddingHorizontal: 40,
     borderRadius: 25,
     marginBottom: 16,
     width: '100%',
     alignItems: 'center',
-    shadowColor: 'rgba(0, 0, 0, 0.3)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   primaryButtonText: {
     fontSize: 16,
-    color: '#1a2332',
+    color: '#FFFFFF',
     fontWeight: '600',
     letterSpacing: 0.5,
   },
