@@ -46,49 +46,40 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- Fix 2: Get unanswered questions for user (with answered status)
+-- Fix 2: Get questions for user
 -- ==========================================
--- Drop existing function first to change return type
 DROP FUNCTION IF EXISTS get_questions_for_user(UUID, INTEGER);
 
-CREATE FUNCTION get_questions_for_user(
+CREATE OR REPLACE FUNCTION get_questions_for_user(
     p_user_id UUID,
-    p_limit INTEGER DEFAULT 40
+    p_limit INTEGER DEFAULT 10
 )
 RETURNS TABLE (
-    question_id VARCHAR(100),
+    question_id VARCHAR,
+    category VARCHAR,
     question_text TEXT,
-    category VARCHAR(50),
-    answer_type VARCHAR(50),
+    answer_type VARCHAR,
     options JSONB,
     base_weight FLOAT,
-    effectiveness_score FLOAT,
-    is_answered BOOLEAN
+    effectiveness_score FLOAT
 ) AS $$
-DECLARE
-    user_lang VARCHAR;
 BEGIN
-    -- Get user's language preference
-    SELECT language INTO user_lang FROM public.user_settings WHERE user_id = p_user_id;
-    user_lang := COALESCE(user_lang, 'ko');
-    
     RETURN QUERY
     SELECT 
-        q.id as question_id,
-        CASE WHEN user_lang = 'en' THEN q.text_en ELSE q.text_ko END as question_text,
+        q.id,
         q.category,
+        CASE 
+            WHEN EXISTS (SELECT 1 FROM user_settings WHERE user_id = p_user_id AND language = 'en')
+            THEN q.text_en
+            ELSE q.text_ko
+        END as question_text,
         q.answer_type,
         q.options,
         q.base_weight,
-        q.effectiveness_score,
-        (ua.question_id IS NOT NULL) as is_answered
+        q.effectiveness_score
     FROM public.questions q
-    LEFT JOIN public.user_answers ua ON (q.id = ua.question_id AND ua.user_id = p_user_id)
     WHERE q.is_active = TRUE
-    ORDER BY 
-        CASE WHEN ua.question_id IS NULL THEN 0 ELSE 1 END,  -- Unanswered first
-        q.effectiveness_score DESC,
-        q.id
+    ORDER BY q.effectiveness_score DESC
     LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql;
@@ -164,12 +155,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- Fix 5: Add indexes for performance  
+-- Fix 5: Add indexes for performance
 -- ==========================================
-
--- Index for user answers performance
-CREATE INDEX IF NOT EXISTS idx_user_answers_user_question 
-ON public.user_answers(user_id, question_id);
 
 -- Index for profiles with embeddings
 CREATE INDEX IF NOT EXISTS idx_profiles_has_embedding 
@@ -379,17 +366,6 @@ BEGIN
                 0.5
             ) as choice_score
         FROM candidate_profiles cp
-    ),
-    dealbreaker_check AS (
-        SELECT 
-            ub.user_id,
-            COUNT(*) > 0 as has_conflict
-        FROM user_answers ua
-        JOIN user_answers ub ON ua.question_id = ub.question_id
-        WHERE ua.user_id = exclude_user_id
-          AND ua.is_dealbreaker = true
-          AND ua.answer_value != ub.answer_value
-        GROUP BY ub.user_id
     )
     SELECT 
         cp.user_id,
@@ -411,20 +387,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Grant Permissions
-GRANT EXECUTE ON FUNCTION get_user_answers_with_metadata(UUID) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION calculate_choice_compatibility(UUID, UUID) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION find_similar_profiles_v2(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER) TO authenticated, service_role;
 
 -- Create Indexes for Performance
-CREATE INDEX IF NOT EXISTS idx_user_answers_dealbreaker ON user_answers(question_id) WHERE is_dealbreaker = true;
 CREATE INDEX IF NOT EXISTS idx_questions_answer_type ON questions(answer_type);
-
--- Update Documentation
-COMMENT ON FUNCTION get_user_answers_with_metadata IS 
-'Returns user answers with question metadata for matching algorithm';
-
-COMMENT ON FUNCTION calculate_choice_compatibility IS 
-'Calculates compatibility score based on choice-type questions with match_weight';
 
 COMMENT ON FUNCTION find_similar_profiles_v2 IS 
 'Hybrid matching algorithm - 50% choice questions + 40% embeddings + 10% bonus. Includes dealbreaker filtering.';
