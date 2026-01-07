@@ -80,7 +80,7 @@ npx expo start
 | **Database** | Supabase (PostgreSQL + pgvector) |
 | **AI Platform** | Azure OpenAI |
 | **Embeddings** | text-embedding-3-large (1024D) |
-| **Chat/Analysis** | GPT-4 |
+| **Chat/Analysis** | gpt-4o-mini |
 | **Vector Search** | pgvector (cosine similarity) |
 | **Deployment** | Docker Compose + Redis |
 
@@ -105,8 +105,8 @@ npx expo start
 |---------|---------|------------|
 | **Hybrid Matching** | Choice questions + semantic embeddings | PostgreSQL + pgvector |
 | **Profile Embedding** | Convert text answers to vectors | Azure OpenAI text-embedding-3-large |
-| **Answer Analysis** | Analyze clarity and extract insights | Azure OpenAI GPT-4 |
-| **Match Explanation** | Generate compatibility reasons | Azure OpenAI GPT-4 |
+| **Answer Analysis** | Analyze clarity and extract insights | Azure OpenAI gpt-4o-mini |
+| **Match Explanation** | Generate compatibility reasons | Azure OpenAI gpt-4o-mini |
 | **Dealbreaker Filter** | Exclude incompatible matches | PostgreSQL functions |
 
 ## Key Features
@@ -143,10 +143,10 @@ npx expo start
 ### 4. Cost Optimization for Korean Text
 - **Translation Pipeline**: Korean → English → AI Processing → Korean
 - **Why**: Korean text uses ~2-3x more tokens than English in GPT models
-- **Savings**: ~60% reduction in embedding and GPT-4 costs
+- **Savings**: ~60% reduction in embedding and gpt-4o-mini costs
 - **Implementation**:
   - Text answers translated to English before embedding generation
-  - GPT-4 analysis done on English text, results translated back
+  - gpt-4o-mini analysis done on English text, results translated back
   - Maintains semantic accuracy while reducing costs
 
 ## API Endpoints
@@ -244,7 +244,7 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your_api_key
 AZURE_OPENAI_API_VERSION=2024-02-01
 AZURE_OPENAI_EMBEDDING_MODEL=text-embedding-3-large
-AZURE_OPENAI_CHAT_MODEL=gpt-4
+AZURE_OPENAI_CHAT_MODEL=gpt-4o-mini
 
 # Azure Translator (Required for cost optimization)
 AZURE_TRANSLATOR_ENDPOINT=https://api.cognitive.microsofttranslator.com/

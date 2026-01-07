@@ -46,7 +46,7 @@ class AzureOpenAIService:
         
         # Model configurations
         self.embedding_model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
-        self.chat_model = os.getenv("AZURE_OPENAI_CHAT_MODEL", "gpt-4")
+        self.chat_model = os.getenv("AZURE_OPENAI_CHAT_MODEL", "gpt-4o-mini")
         
         # Validate environment variables
         if not all([os.getenv("AZURE_OPENAI_API_KEY"), os.getenv("AZURE_OPENAI_ENDPOINT")]):
