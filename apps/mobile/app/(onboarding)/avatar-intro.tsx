@@ -39,8 +39,9 @@ export default function AvatarIntroScreen() {
   const managerBounceAnim = useRef(new Animated.Value(0)).current;
 
   const introMessage = {
-    text: '나에게 딱 맞는 인연을 찾기위한 프로필 작성 시작합니다',
-    subtitle: '포기하지말고 끝까지 응답해주세요',
+    text: '이제 당신의 이상형을 찾기 위한 질문이 시작됩니다',
+    subtitle: '객관식 35개 + 서술형 5개 (약 15분)',
+    description: '모든 답변은 AI가 분석하여 가장 잘 맞는 상대를 찾는데 사용됩니다'
   };
 
   // Process steps to show
@@ -218,6 +219,14 @@ export default function AvatarIntroScreen() {
           >
             {introMessage.subtitle}
           </Text>
+          <Text 
+            style={styles.descriptionText}
+            accessible={true}
+            accessibilityRole="text"
+            accessibilityLabel={introMessage.description}
+          >
+            {introMessage.description}
+          </Text>
         </View>
 
         {/* Action Buttons */}
@@ -371,11 +380,19 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   subtitleText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 16,
+    color: '#00FFC8',
     textAlign: 'center',
-    lineHeight: 20,
-    fontWeight: '500',
+    lineHeight: 22,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  descriptionText: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    lineHeight: 18,
+    fontWeight: '400',
   },
   buttonContainer: {
     width: '100%',
