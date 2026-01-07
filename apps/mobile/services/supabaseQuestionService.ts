@@ -160,7 +160,8 @@ class SupabaseQuestionService {
         query = query.limit(limit);
       }
 
-      query = query.order('effectiveness_score', { ascending: false });
+      // Order by answer_type first (choice before text), then by effectiveness_score
+      query = query.order('answer_type', { ascending: true }).order('effectiveness_score', { ascending: false });
 
       const { data, error } = await query;
 
@@ -260,7 +261,7 @@ class SupabaseQuestionService {
       console.log(`📋 Loading user profile: ${userId}`);
 
       // Use database function to get complete profile
-      const { data, error } = await supabase.rpc('get_user_profile_data', {
+      const { data, error } = await supabase.rpc('get_user_profile_summary', {
         p_user_id: userId
       });
 
