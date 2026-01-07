@@ -1,83 +1,70 @@
 """
 FLIO AI Backend Services
-FastAPI server for face verification, matching, speech, and AI features
+FastAPI server with Azure OpenAI integration for dating app matching
 """
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import os
 
-from app.routers import face, matching, questions, speech
-from app.models.face_recognition import FaceRecognitionModel
-from app.models.profile_matching_v2 import ProfileMatchingModelV2
-from app.models.question_generator import AdaptiveQuestionGenerator
-from app.models.speech import SpeechProcessor
-from app.models.rag_questions import RAGQuestionRetriever
-from app.models.question_rl import QuestionSelector, QuestionOrchestrator
-
-# Configure logging
+# Configure logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global model instances
-models = {}
+# Import services and routers
+from app.routers import questions, matching, auth
+from app.services.azure_openai_service import azure_openai_service
+from app.models.database import get_supabase_client
+
+# Global services
+services = {}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Load ML models on startup, cleanup on shutdown
+    Initialize Azure OpenAI and Supabase connections on startup
     """
-    logger.info("Loading AI models...")
+    logger.info("Starting FLIO AI Backend...")
     
-    # Load face recognition model (InsightFace/ArcFace)
-    logger.info("Loading InsightFace model...")
-    models["face"] = FaceRecognitionModel()
-    
-    # Load profile embedding model (BGE-M3 Korean)
-    logger.info("Loading BGE-M3 Korean model...")
-    models["profile"] = ProfileMatchingModelV2(model_name="upskyy/bge-m3-korean")
-    
-    # Load question generator (Qwen2.5-7B)
-    logger.info("Loading Qwen2.5-7B model...")
-    models["questions"] = AdaptiveQuestionGenerator()
-    
-    # Load speech processor (Whisper + MeloTTS)
-    logger.info("Loading Speech models (Whisper + MeloTTS)...")
-    models["speech"] = SpeechProcessor(whisper_size="large-v3")
-    
-    # Load RAG retriever
-    logger.info("Loading RAG Question Retriever...")
-    models["rag"] = RAGQuestionRetriever(embedding_model=models["profile"].model)
-    
-    # Load RL selector
-    logger.info("Loading RL Question Selector...")
-    models["rl"] = QuestionSelector()
-    
-    # Setup orchestrator
-    models["orchestrator"] = QuestionOrchestrator(
-        rag_retriever=models["rag"],
-        rl_selector=models["rl"],
-        question_generator=models["questions"]
-    )
-    
-    # Inject speech processor into router
-    speech.set_speech_processor(models["speech"])
-    
-    logger.info("All models loaded successfully!")
+    try:
+        # Initialize Azure OpenAI service
+        logger.info("Initializing Azure OpenAI service...")
+        services["azure_openai"] = azure_openai_service
+        
+        # Test Azure OpenAI connection
+        test_response = await azure_openai_service.generate_profile_embedding("Test connection")
+        logger.info(f"Azure OpenAI connected - embedding dimension: {len(test_response.embedding)}")
+        
+        # Initialize Supabase connection
+        logger.info("Initializing Supabase connection...")
+        try:
+            supabase_client = get_supabase_client()
+            services["supabase"] = supabase_client
+            logger.info("Supabase client initialized - skipping connection test during startup")
+        except Exception as e:
+            logger.warning(f"Supabase initialization failed: {e}")
+            logger.info("Continuing without Supabase - will retry on first request")
+        
+        logger.info("All services initialized successfully!")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize services: {e}")
+        raise
     
     yield
     
     # Cleanup
-    logger.info("Shutting down, cleaning up models...")
-    models.clear()
+    logger.info("Shutting down FLIO AI Backend...")
+    services.clear()
 
 
 app = FastAPI(
     title="FLIO AI Backend",
-    description="AI services for FLIO dating app - Face verification, matching, speech, and more",
-    version="2.0.0",
+    description="Azure OpenAI powered dating app backend for Korean compatibility matching",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
@@ -91,10 +78,10 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(face.router, prefix="/api/face", tags=["Face Verification"])
-app.include_router(matching.router, prefix="/api/match", tags=["Matching"])
-app.include_router(questions.router, prefix="/api/questions", tags=["Adaptive Questions"])
-app.include_router(speech.router, prefix="/api/speech", tags=["Speech (STT/TTS)"])
+app.include_router(questions.router, prefix="/api/v1/questions", tags=["Questions & Answers"])
+app.include_router(matching.router, prefix="/api/v1/matching", tags=["Profile Matching"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+logger.info("Routers included successfully")
 
 
 @app.get("/")
@@ -103,58 +90,82 @@ async def root():
     return {
         "service": "FLIO AI Backend",
         "status": "healthy",
-        "models_loaded": list(models.keys()),
+        "version": "1.0.0",
+        "services_loaded": list(services.keys()),
+        "description": "Azure OpenAI powered Korean dating app backend"
     }
 
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check"""
+    """Detailed health check for monitoring"""
+    try:
+        # Check Azure OpenAI connectivity
+        azure_status = "azure_openai" in services
+        
+        # Check Supabase connectivity
+        supabase_status = "supabase" in services
+        
+        # Overall health
+        overall_healthy = azure_status and supabase_status
+        
+        return {
+            "status": "healthy" if overall_healthy else "degraded",
+            "timestamp": __import__('datetime').datetime.now().isoformat(),
+            "services": {
+                "azure_openai": {
+                    "status": "connected" if azure_status else "disconnected",
+                    "embedding_model": "text-embedding-3-small",
+                    "chat_model": "gpt-4o-mini",
+                    "features": ["embeddings", "chat_completion", "answer_analysis"]
+                },
+                "supabase": {
+                    "status": "connected" if supabase_status else "disconnected",
+                    "features": ["questions_db", "user_answers", "profile_embeddings"]
+                }
+            },
+            "features": [
+                "✅ Korean compatibility questions (40 questions)",
+                "✅ Azure OpenAI text analysis",
+                "✅ Profile embedding generation", 
+                "✅ Similarity-based matching",
+                "✅ Match explanations in Korean",
+                "✅ Answer quality analysis"
+            ],
+            "architecture": {
+                "embedding_model": "Azure OpenAI text-embedding-3-small (1536D)",
+                "chat_model": "Azure OpenAI gpt-4o-mini",
+                "database": "Supabase PostgreSQL with pgvector",
+                "matching_algorithm": "Cosine similarity + cultural scoring"
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "services": services.keys() if services else []
+        }
+
+
+@app.get("/api/v1/system/info")
+async def system_info():
+    """System information for debugging"""
     return {
-        "status": "healthy",
-        "models": {
-            "face_recognition": "face" in models,
-            "profile_embedding": "profile" in models,
-            "question_generator": "questions" in models,
-            "speech": "speech" in models,
-            "rag": "rag" in models,
-            "rl": "rl" in models,
+        "environment_variables": {
+            "azure_openai_configured": bool(os.getenv("AZURE_OPENAI_ENDPOINT")),
+            "supabase_configured": bool(os.getenv("SUPABASE_URL")),
         },
-        "features": [
-            "Face Verification (85%)",
-            "Profile Matching (BGE-M3)",
-            "Adaptive Questions (Qwen2.5)",
-            "STT (Whisper)",
-            "TTS (MeloTTS)",
-            "RAG (Question Database)",
-            "RL (Thompson Sampling)"
-        ]
+        "models": {
+            "embedding_model": os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+            "chat_model": os.getenv("AZURE_OPENAI_CHAT_MODEL", "gpt-4o-mini"),
+            "api_version": os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01")
+        },
+        "features": {
+            "profile_embeddings": True,
+            "compatibility_matching": True, 
+            "answer_analysis": True,
+            "match_explanations": True,
+            "korean_language": True
+        }
     }
-
-
-def get_face_model() -> FaceRecognitionModel:
-    """Dependency to get face recognition model"""
-    if "face" not in models:
-        raise HTTPException(status_code=503, detail="Face model not loaded")
-    return models["face"]
-
-
-def get_profile_model() -> ProfileMatchingModelV2:
-    """Dependency to get profile embedding model"""
-    if "profile" not in models:
-        raise HTTPException(status_code=503, detail="Profile model not loaded")
-    return models["profile"]
-
-
-def get_speech_processor() -> SpeechProcessor:
-    """Dependency to get speech processor"""
-    if "speech" not in models:
-        raise HTTPException(status_code=503, detail="Speech model not loaded")
-    return models["speech"]
-
-
-def get_orchestrator() -> QuestionOrchestrator:
-    """Dependency to get question orchestrator (RAG + RL + Qwen2.5)"""
-    if "orchestrator" not in models:
-        raise HTTPException(status_code=503, detail="Orchestrator not loaded")
-    return models["orchestrator"]

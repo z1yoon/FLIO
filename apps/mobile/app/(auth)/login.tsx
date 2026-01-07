@@ -12,20 +12,124 @@ import {
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../services/supabase/client';
+import { FLIOAlertAPI } from '../../components/FLIOAlert';
+import { supabaseQuestionService } from '../../services/supabaseQuestionService';
 
 export default function LoginScreen() {
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
+    if (!email || !password) {
+      FLIOAlertAPI.alert('입력 오류', '이메일과 비밀번호를 입력해주세요.');
+      return;
+    }
+
     setIsLoading(true);
-    // TODO: Implement actual login with Supabase
-    setTimeout(() => {
+    try {
+      // Login with email and password
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (authError) {
+        console.error('Login error:', authError);
+        
+        // Handle email not confirmed error specifically
+        if (authError.message?.includes('Email not confirmed') || authError.message?.includes('email_not_confirmed')) {
+          FLIOAlertAPI.alert(
+            '이메일 확인 필요',
+            '계정이 생성되었지만 이메일 확인이 필요합니다. Supabase 설정에서 이메일 확인을 비활성화하거나, 관리자에게 문의하세요.',
+            [
+              {
+                text: '확인',
+                onPress: () => {
+                  // Optionally redirect to signup or show instructions
+                }
+              }
+            ]
+          );
+        } else {
+          FLIOAlertAPI.alert('로그인 실패', authError.message || '이메일 또는 비밀번호가 올바르지 않습니다.');
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      if (authData.user) {
+        console.log('✅ Login successful:', authData.user.id);
+        
+        // Check profile completion status
+        try {
+          const userProfile = await supabaseQuestionService.getUserProfile(authData.user.id);
+          const hasAnsweredQuestions = (userProfile?.total_answers || 0) > 0;
+          const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
+          
+          console.log(`📊 User profile status: ${userProfile?.total_answers || 0} answers, can match: ${canStartMatching}`);
+          
+          if (!hasAnsweredQuestions) {
+            // No questions answered - redirect to questions
+            console.log('🔄 Redirecting to questions - no answers found');
+            FLIOAlertAPI.alert(
+              '프로필 완성하기', 
+              '매칭을 시작하기 위해 질문에 답변해주세요.',
+              [
+                { 
+                  text: '질문 답변하기', 
+                  onPress: () => router.replace('/(onboarding)/questions')
+                }
+              ]
+            );
+            return;
+          } else if (!canStartMatching) {
+            // Some questions answered but not enough for matching
+            console.log('🔄 Redirecting to questions - insufficient answers for matching');
+            FLIOAlertAPI.alert(
+              '프로필 완성하기', 
+              `더 나은 매칭을 위해 몇 가지 질문에 더 답변해주세요. (현재: ${userProfile?.total_answers || 0}개 답변)`,
+              [
+                { 
+                  text: '계속 답변하기', 
+                  onPress: () => router.replace('/(onboarding)/questions')
+                },
+                { 
+                  text: '나중에', 
+                  style: 'cancel',
+                  onPress: () => router.replace('/(tabs)/matches')
+                }
+              ]
+            );
+            return;
+          } else {
+            // Profile complete - go to matches
+            console.log('✅ Profile complete - redirecting to matches');
+            router.replace('/(tabs)/matches');
+          }
+        } catch (profileError) {
+          console.error('❌ Failed to check profile status:', profileError);
+          // If profile check fails, allow user to proceed but show warning
+          FLIOAlertAPI.alert(
+            '프로필 상태 확인 실패',
+            '프로필 상태를 확인할 수 없습니다. 매칭 화면으로 이동합니다.',
+            [
+              {
+                text: '확인',
+                onPress: () => router.replace('/(tabs)/matches')
+              }
+            ]
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      FLIOAlertAPI.alert('로그인 오류', error.message || '로그인 중 문제가 발생했습니다.');
+    } finally {
       setIsLoading(false);
-      router.replace('/(main)');
-    }, 1500);
+    }
   };
 
   const handleSocialLogin = (provider: 'apple' | 'google' | 'kakao') => {
@@ -65,15 +169,16 @@ export default function LoginScreen() {
         {/* Form */}
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Ionicons name="phone-portrait-outline" size={20} color="rgba(255,255,255,0.5)" />
+            <Ionicons name="mail-outline" size={20} color="rgba(255,255,255,0.5)" />
             <TextInput
               style={styles.input}
-              placeholder="휴대폰 번호"
+              placeholder="이메일 주소"
               placeholderTextColor="rgba(255,255,255,0.4)"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              keyboardType="phone-pad"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 

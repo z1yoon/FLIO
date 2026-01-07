@@ -1,88 +1,238 @@
 """
-Matching API Routes
+FLIO Matching API Routes
+Core matching functionality using Azure OpenAI embeddings
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import Dict, List
+from typing import List, Dict, Optional, Any
 import logging
+from datetime import datetime
+
+from ..services.profile_embedding_service import profile_embedding_service
+from ..services.azure_openai_service import azure_openai_service
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
+# Response Models
+class ProfileEmbeddingResponse(BaseModel):
+    success: bool
+    message: str
+    profile_summary: Optional[Dict] = None
+    embedding_created: bool = False
 
+class MatchResult(BaseModel):
+    user_id: str
+    compatibility_score: float
+    similarity_score: float
+    cultural_bonus: float
+    nickname: Optional[str] = None
+    age: Optional[int] = None
+
+class MatchesResponse(BaseModel):
+    user_id: str
+    matches: List[MatchResult]
+    total_found: int
+    metadata: Dict[str, Any]
+
+class MatchExplanationResponse(BaseModel):
+    compatibility_score: float
+    summary: str
+    compatibility_reasons: List[str]
+    conversation_starters: List[str]
+    detailed_scores: Dict[str, float]
+
+# Profile Embedding Endpoints
+
+@router.post("/profile/create-embedding", response_model=ProfileEmbeddingResponse)
+async def create_user_embedding(user_id: str):
+    """
+    Create or update user profile embedding from their answers
+    This should be called when user completes questionnaire
+    
+    - **user_id**: User's unique identifier
+    """
+    try:
+        # Create user profile embedding
+        user_profile = await profile_embedding_service.create_user_embedding(user_id)
+        
+        return ProfileEmbeddingResponse(
+            success=True,
+            message=f"Profile embedding created successfully for user {user_id}",
+            profile_summary={
+                "nickname": user_profile.nickname,
+                "age": user_profile.age,
+                "answer_count": len(user_profile.answers),
+                "profile_length": len(user_profile.profile_text),
+                "embedding_dimension": len(user_profile.embedding)
+            },
+            embedding_created=True
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to create embedding for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Embedding creation failed: {str(e)}")
+
+@router.get("/profile/{user_id}/embedding-status")
+async def get_embedding_status(user_id: str):
+    """
+    Check if user has a valid profile embedding
+    
+    - **user_id**: User's unique identifier
+    """
+    try:
+        embedding = await profile_embedding_service._get_user_embedding(user_id)
+        
+        if embedding:
+            return {
+                "has_embedding": True,
+                "embedding_dimension": len(embedding),
+                "message": "User has valid profile embedding"
+            }
+        else:
+            return {
+                "has_embedding": False,
+                "message": "User needs to complete questionnaire for embedding creation"
+            }
+            
+    except Exception as e:
+        logger.error(f"Failed to check embedding status for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Matching Endpoints
+
+@router.get("/matches/{user_id}", response_model=MatchesResponse)
+async def find_matches(
+    user_id: str,
+    limit: int = Query(default=10, ge=1, le=50, description="Number of matches to return"),
+    min_compatibility: float = Query(default=0.3, ge=0.0, le=1.0, description="Minimum compatibility score")
+):
+    """
+    Find compatible matches for a user based on profile similarity
+    
+    - **user_id**: User's unique identifier
+    - **limit**: Maximum number of matches to return (1-50)
+    - **min_compatibility**: Minimum compatibility score (0.0-1.0)
+    """
+    try:
+        # Find compatible matches
+        match_results = await profile_embedding_service.find_compatible_matches(user_id, limit * 2)
+        
+        # Filter by minimum compatibility
+        filtered_matches = [
+            match for match in match_results 
+            if match.compatibility_score >= min_compatibility
+        ]
+        
+        # Limit results
+        final_matches = filtered_matches[:limit]
+        
+        return MatchesResponse(
+            user_id=user_id,
+            matches=final_matches,
+            total_found=len(matches),
+            metadata={
+                "algorithm_version": "2.0-hybrid",
+                "embedding_dimension": 1024,
+                "choice_weight": 0.5,
+                "embedding_weight": 0.4,
+                "importance_bonus": 0.1,
+                "dealbreaker_filtering": True
+            }
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to find matches for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Match finding failed: {str(e)}")
+
+
+@router.get("/match-explanation/{user_a_id}/{user_b_id}", response_model=MatchExplanationResponse)
+async def get_match_explanation(user_a_id: str, user_b_id: str):
+    """
+    Get detailed explanation for why two users match
+    Uses Azure OpenAI to generate human-readable explanation
+    
+    - **user_a_id**: First user's ID
+    - **user_b_id**: Second user's ID
+    """
+    try:
+        # Generate match explanation
+        explanation_data = await profile_embedding_service.get_match_explanation(user_a_id, user_b_id)
+        
+        explanation = explanation_data['explanation']
+        
+        return MatchExplanationResponse(
+            compatibility_score=explanation_data['compatibility_score'],
+            summary=explanation['summary'],
+            compatibility_reasons=explanation['compatibility_reasons'],
+            conversation_starters=explanation['conversation_starters'],
+            detailed_scores=explanation_data['detailed_scores']
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to generate explanation for {user_a_id} and {user_b_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Explanation generation failed: {str(e)}")
+
+
+# Legacy endpoints for backward compatibility
 class EmbedProfileRequest(BaseModel):
     profile: Dict[str, str]  # Question-answer pairs
 
-
 class EmbedProfileResponse(BaseModel):
     embedding: List[float]
-
 
 class ExplainRequest(BaseModel):
     profile_a: Dict[str, str]
     profile_b: Dict[str, str]
     score: float
 
-
 class MatchPoint(BaseModel):
     category: str
     match: bool
     description: str
 
-
 class ExplainResponse(BaseModel):
     explanation: str
     match_points: List[MatchPoint]
 
-
 @router.post("/embed", response_model=EmbedProfileResponse)
-async def generate_profile_embedding(request: EmbedProfileRequest):
+async def generate_profile_embedding_legacy(request: EmbedProfileRequest):
     """
-    Generate 768D embedding for user profile
-    
-    - **profile**: Dictionary of question-answer pairs
-    
-    Returns semantic embedding for matching
+    Legacy endpoint - Generate embedding for profile dictionary
     """
-    from app.main import get_profile_model
-    
     try:
-        model = get_profile_model()
-        
         if not request.profile:
-            raise HTTPException(
-                status_code=400,
-                detail="Profile data is empty"
-            )
+            raise HTTPException(status_code=400, detail="Profile data is empty")
         
-        embedding = model.generate_embedding(request.profile)
+        # Build profile text from dictionary
+        profile_text = " | ".join([f"{k}: {v}" for k, v in request.profile.items()])
         
-        return EmbedProfileResponse(embedding=embedding)
-    except HTTPException:
-        raise
+        # Generate embedding using Azure OpenAI
+        embedding_response = await azure_openai_service.generate_profile_embedding(profile_text)
+        
+        return EmbedProfileResponse(embedding=embedding_response.embedding)
+        
     except Exception as e:
-        logger.error(f"Profile embedding error: {e}")
+        logger.error(f"Legacy profile embedding error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.post("/explain", response_model=ExplainResponse)
-async def generate_match_explanation(request: ExplainRequest):
+async def generate_match_explanation_legacy(request: ExplainRequest):
     """
-    Generate human-readable explanation for match
-    
-    - **profile_a**: First user's profile
-    - **profile_b**: Second user's profile  
-    - **score**: Matching score (0-100)
-    
-    Returns explanation with specific match points
+    Legacy endpoint - Generate simple match explanation
     """
     try:
-        # Analyze key matching categories
+        # Simple compatibility analysis
         match_points = []
         
-        # Marriage timeline
+        # Check key matching factors
         if "결혼 계획" in request.profile_a and "결혼 계획" in request.profile_b:
             a_val = request.profile_a["결혼 계획"]
             b_val = request.profile_b["결혼 계획"]
@@ -94,30 +244,7 @@ async def generate_match_explanation(request: ExplainRequest):
                            else f"결혼 시기 차이 ({a_val} vs {b_val})"
             ))
         
-        # Financial values
-        if "경제력" in request.profile_a and "경제력" in request.profile_b:
-            a_val = request.profile_a["경제력"]
-            b_val = request.profile_b["경제력"]
-            is_match = a_val == b_val
-            match_points.append(MatchPoint(
-                category="재정 관리",
-                match=is_match,
-                description="재정 가치관 일치" if is_match else "재정 가치관 차이"
-            ))
-        
-        # Family living
-        if "부모님 동거" in request.profile_a and "부모님 동거" in request.profile_b:
-            a_val = request.profile_a["부모님 동거"]
-            b_val = request.profile_b["부모님 동거"]
-            is_match = a_val == b_val
-            match_points.append(MatchPoint(
-                category="가족 생활",
-                match=is_match,
-                description="부모님 동거 계획 일치" if is_match 
-                           else f"부모님 동거 의견 차이 (대화 권장)"
-            ))
-        
-        # Generate overall explanation
+        # Generate explanation
         matches = sum(1 for mp in match_points if mp.match)
         total = len(match_points)
         
@@ -133,9 +260,8 @@ async def generate_match_explanation(request: ExplainRequest):
             match_points=match_points
         )
     except Exception as e:
-        logger.error(f"Match explanation error: {e}")
+        logger.error(f"Legacy match explanation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 def _check_timeline_match(a: str, b: str) -> bool:
     """Check if marriage timelines are compatible"""

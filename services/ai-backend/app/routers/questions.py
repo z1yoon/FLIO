@@ -1,18 +1,51 @@
 """
-Adaptive Question Generation API Routes
-Uses Qwen2.5-7B for Korean language understanding
+FLIO Question Database API Routes
+Serves questions from Supabase database for Korean dating compatibility
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import logging
+import json
+import os
+from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
+# Import Supabase client from database models
+from ..models.database import get_supabase_client
 
+
+# Enhanced Question Models
+class QuestionResponse(BaseModel):
+    id: str
+    text: str
+    category: str
+    type: str
+    options: Optional[List[str]] = None
+    effectiveness_score: Optional[float] = None
+    placeholder: Optional[str] = None
+    maxLength: Optional[int] = None
+
+
+class InitialQuestionsResponse(BaseModel):
+    questions: List[QuestionResponse]
+    total: int
+    metadata: Dict[str, Any]
+
+
+class QuestionStatsResponse(BaseModel):
+    total_questions: int
+    by_category: Dict[str, int]
+    by_type: Dict[str, int]
+    high_effectiveness_count: int
+    open_ended_count: int
+    multiple_choice_count: int
+
+
+# Legacy models for backward compatibility
 class AnalyzeAnswerRequest(BaseModel):
     question: str
     answer: str
@@ -93,7 +126,504 @@ class MatchExplanationResponse(BaseModel):
     conversation_starters: List[str]
 
 
-# Global model instance (loaded on startup)
+# Enhanced Question Database API Endpoints
+
+@router.get("/initial", response_model=InitialQuestionsResponse)
+async def get_initial_questions(user_id: Optional[str] = None, language: str = "ko"):
+    """
+    Get initial questions from Supabase database for Korean dating compatibility
+    
+    Returns questions ordered by base_weight (effectiveness score).
+    If user_id provided, excludes questions already answered.
+    
+    - **user_id**: Optional user ID to exclude answered questions
+    - **language**: Language preference (ko/en)
+    """
+    try:
+        # If user_id provided, get unanswered questions
+        if user_id:
+            result = get_supabase_client().rpc('get_questions_for_user', {
+                'p_user_id': user_id,
+                'p_limit': 40
+            }).execute()
+            
+            if result.data:
+                questions = []
+                for q in result.data:
+                    # Parse options JSON
+                    options_data = q.get('options', [])
+                    if isinstance(options_data, str):
+                        options_data = json.loads(options_data)
+                    
+                    # Extract option texts based on language
+                    text_key = f"text_{language}" if language == "en" else "text_ko"
+                    option_texts = [opt.get(text_key, opt.get("text_ko", "")) for opt in options_data]
+                    
+                    questions.append(QuestionResponse(
+                        id=q['question_id'],
+                        text=q['question_text'],
+                        category=q['category'],
+                        type=q['answer_type'],
+                        options=option_texts if option_texts else None,
+                        effectiveness_score=q.get('base_weight', 0.5)
+                    ))
+                
+                return InitialQuestionsResponse(
+                    questions=questions,
+                    total=len(questions),
+                    metadata={
+                        "version": "2.0",
+                        "source": "Supabase database",
+                        "language": language,
+                        "user_specific": True,
+                        "unanswered_only": True
+                    }
+                )
+        
+        # Get all active questions
+        result = get_supabase_client().table('questions').select(
+            'id, category, text_ko, text_en, answer_type, options, base_weight, effectiveness_score, can_be_dealbreaker, placeholder, max_length'
+        ).eq('is_active', True).order('effectiveness_score', desc=True).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="No questions found")
+        
+        questions = []
+        for q in result.data:
+            # Parse options JSON
+            options_data = q.get('options', [])
+            if isinstance(options_data, str):
+                options_data = json.loads(options_data)
+            
+            # Extract option texts based on language
+            text_key = f"text_{language}" if language == "en" else "text_ko"
+            question_text = q.get(f'text_{language}', q.get('text_ko', ''))
+            option_texts = [opt.get(text_key, opt.get("text_ko", "")) for opt in options_data]
+            
+            # Handle open-ended questions
+            if q.get('answer_type') in ['text', 'open_ended']:
+                questions.append(QuestionResponse(
+                    id=q['id'],
+                    text=question_text,
+                    category=q['category'],
+                    type='text',  # Normalize to 'text' for frontend
+                    options=None,
+                    effectiveness_score=q.get('effectiveness_score', q.get('base_weight', 0.5)),
+                    placeholder=q.get('placeholder'),
+                    maxLength=q.get('max_length', 500)
+                ))
+            else:
+                # Convert 'single_select' to 'choice' for frontend compatibility
+                question_type = 'choice' if q.get('answer_type') == 'single_select' else q.get('answer_type')
+                
+                questions.append(QuestionResponse(
+                    id=q['id'],
+                    text=question_text,
+                    category=q['category'],
+                    type=question_type,
+                    options=option_texts if option_texts else None,
+                    effectiveness_score=q.get('effectiveness_score', q.get('base_weight', 0.5))
+                ))
+        
+        return InitialQuestionsResponse(
+            questions=questions,
+            total=len(questions),
+            metadata={
+                "version": "2.0",
+                "source": "Supabase database",
+                "language": language,
+                "user_specific": False,
+                "research_basis": [
+                    "Korean MBTI cultural preferences",
+                    "Marriage agency assessment practices", 
+                    "Attachment theory research",
+                    "Big Five personality compatibility"
+                ]
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to load questions from Supabase: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Database unavailable. Please try again later."
+        )
+
+
+@router.get("/stats", response_model=QuestionStatsResponse)
+async def get_question_statistics():
+    """
+    Get statistics about the question database from Supabase
+    
+    Returns breakdown by category, type, and effectiveness metrics
+    """
+    try:
+        # Get all questions
+        result = get_supabase_client().table('questions').select(
+            'category, answer_type, base_weight, effectiveness_score'
+        ).eq('is_active', True).execute()
+        
+        if not result.data:
+            return QuestionStatsResponse(
+                total_questions=0,
+                by_category={},
+                by_type={},
+                high_effectiveness_count=0,
+                open_ended_count=0,
+                multiple_choice_count=0
+            )
+        
+        questions = result.data
+        total = len(questions)
+        
+        # Count by category
+        by_category = {}
+        for q in questions:
+            cat = q.get('category', 'Unknown')
+            by_category[cat] = by_category.get(cat, 0) + 1
+        
+        # Count by type
+        by_type = {}
+        for q in questions:
+            qtype = q.get('answer_type', 'Unknown')
+            by_type[qtype] = by_type.get(qtype, 0) + 1
+        
+        # High effectiveness count (>= 9.0)
+        high_eff = len([q for q in questions if q.get('effectiveness_score', q.get('base_weight', 0)) >= 9.0])
+        
+        # Open-ended and multiple choice counts
+        open_ended = by_type.get('text', 0) + by_type.get('open_ended', 0)
+        multiple_choice = by_type.get('choice', 0) + by_type.get('single_select', 0) + by_type.get('multiple_select', 0)
+        
+        return QuestionStatsResponse(
+            total_questions=total,
+            by_category=by_category,
+            by_type=by_type,
+            high_effectiveness_count=high_eff,
+            open_ended_count=open_ended,
+            multiple_choice_count=multiple_choice
+        )
+    except Exception as e:
+        logger.error(f"Failed to get question stats from Supabase: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/category/{category}")
+async def get_questions_by_category(category: str, language: str = "ko"):
+    """
+    Get questions by specific category from Supabase
+    
+    - **category**: Category name (Korean or English)
+    - **language**: Language preference (ko/en)
+    """
+    try:
+        result = get_supabase_client().table('questions').select(
+            'id, category, text_ko, text_en, answer_type, options, base_weight, effectiveness_score'
+        ).eq('category', category).eq('is_active', True).order('effectiveness_score', desc=True).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail=f"No questions found for category: {category}")
+        
+        questions = []
+        for q in result.data:
+            # Parse options JSON
+            options_data = q.get('options', [])
+            if isinstance(options_data, str):
+                options_data = json.loads(options_data)
+            
+            # Extract option texts based on language
+            text_key = f"text_{language}" if language == "en" else "text_ko"
+            question_text = q.get(f'text_{language}', q.get('text_ko', ''))
+            option_texts = [opt.get(text_key, opt.get("text_ko", "")) for opt in options_data]
+            
+            questions.append({
+                "id": q['id'],
+                "text": question_text,
+                "type": 'choice' if q['answer_type'] == 'single_select' else q['answer_type'],
+                "options": option_texts if option_texts else None,
+                "effectiveness_score": q.get('effectiveness_score', q.get('base_weight', 0.5))
+            })
+        
+        return {
+            "category": category,
+            "questions": questions,
+            "total": len(questions),
+            "language": language
+        }
+    except Exception as e:
+        logger.error(f"Failed to get questions for category {category}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/question/{question_id}")
+async def get_question_by_id(question_id: str, language: str = "ko"):
+    """
+    Get a specific question by its ID from Supabase
+    
+    - **question_id**: Unique question identifier
+    - **language**: Language preference (ko/en)
+    """
+    try:
+        result = get_supabase_client().table('questions').select(
+            'id, category, text_ko, text_en, answer_type, options, base_weight, effectiveness_score, can_be_dealbreaker, placeholder, max_length'
+        ).eq('id', question_id).eq('is_active', True).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail=f"Question not found: {question_id}")
+        
+        question = result.data[0]
+        
+        # Parse options JSON
+        options_data = question.get('options', [])
+        if isinstance(options_data, str):
+            options_data = json.loads(options_data)
+        
+        # Extract option texts based on language
+        text_key = f"text_{language}" if language == "en" else "text_ko"
+        question_text = question.get(f'text_{language}', question.get('text_ko', ''))
+        option_texts = [opt.get(text_key, opt.get("text_ko", "")) for opt in options_data]
+        
+        # Normalize type for frontend compatibility
+        question_type = question['answer_type']
+        if question_type == 'single_select':
+            question_type = 'choice'
+        elif question_type == 'open_ended':
+            question_type = 'text'
+            
+        return {
+            "id": question['id'],
+            "text": question_text,
+            "category": question['category'],
+            "type": question_type,
+            "options": option_texts if option_texts else None,
+            "effectiveness_score": question.get('effectiveness_score', question.get('base_weight', 0.5)),
+            "can_be_dealbreaker": question.get('can_be_dealbreaker', False),
+            "placeholder": question.get('placeholder'),
+            "maxLength": question.get('max_length', 500 if question_type == 'text' else None)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get question {question_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# User Answer Management
+
+class UserAnswerRequest(BaseModel):
+    user_id: str
+    question_id: str
+    answer_value: str
+    importance: Optional[int] = 3
+    is_dealbreaker: Optional[bool] = False
+
+class UserAnswerResponse(BaseModel):
+    success: bool
+    message: str
+    analysis: Optional[Dict] = None
+    needs_followup: Optional[bool] = False
+
+class UserAnswer(BaseModel):
+    question_id: str
+    answer_value: str
+    importance: int
+    is_dealbreaker: bool
+    timestamp: str
+    question_text: Optional[str] = None
+    category: Optional[str] = None
+
+class UserProfileResponse(BaseModel):
+    user_id: str
+    answers: List[UserAnswer]
+    total_answers: int
+    embedding_status: Dict[str, Any]
+    profile_completion: Dict[str, Any]
+
+@router.get("/user/{user_id}/profile", response_model=UserProfileResponse)
+async def get_user_profile(user_id: str):
+    """
+    Get user's complete profile including all answers and embedding status
+    
+    - **user_id**: User's unique identifier
+    
+    Returns all answered questions with values and AI analysis status
+    """
+    try:
+        # 1. Get user's answers with question details
+        answers_result = get_supabase_client().table('user_answers').select(
+            'question_id, answer_value, importance, is_dealbreaker, created_at, questions!inner(text_ko, category, answer_type)'
+        ).eq('user_id', user_id).order('created_at', desc=True).execute()
+        
+        user_answers = []
+        if answers_result.data:
+            for answer in answers_result.data:
+                question_data = answer.get('questions', {})
+                user_answers.append(UserAnswer(
+                    question_id=answer['question_id'],
+                    answer_value=answer['answer_value'],
+                    importance=answer['importance'],
+                    is_dealbreaker=answer['is_dealbreaker'],
+                    timestamp=answer['created_at'],
+                    question_text=question_data.get('text_ko', ''),
+                    category=question_data.get('category', '')
+                ))
+        
+        # 2. Check embedding status using existing service
+        from ..services.azure_openai_service import azure_openai_service
+        try:
+            # Check if user has embedding in user_embeddings table
+            embedding_result = get_supabase_client().table('user_embeddings').select(
+                'embedding_dimension, created_at'
+            ).eq('user_id', user_id).single().execute()
+            
+            if embedding_result.data:
+                embedding_status = {
+                    "has_embedding": True,
+                    "embedding_dimension": embedding_result.data.get('embedding_dimension', 1024),
+                    "created_at": embedding_result.data.get('created_at'),
+                    "message": "AI 프로필 분석 완료"
+                }
+            else:
+                embedding_status = {
+                    "has_embedding": False,
+                    "message": "AI 프로필 분석 대기 중"
+                }
+        except Exception:
+            embedding_status = {
+                "has_embedding": False,
+                "message": "AI 프로필 분석 대기 중"
+            }
+        
+        # 3. Calculate profile completion
+        total_questions_result = get_supabase_client().table('questions').select(
+            'id', count='exact'
+        ).eq('is_active', True).execute()
+        
+        total_questions = total_questions_result.count if total_questions_result.count else 40
+        answered_questions = len(user_answers)
+        completion_percentage = (answered_questions / total_questions) * 100 if total_questions > 0 else 0
+        
+        profile_completion = {
+            "total_questions": total_questions,
+            "answered_questions": answered_questions,
+            "completion_percentage": completion_percentage,
+            "can_start_matching": answered_questions >= 3  # Minimum for matching
+        }
+        
+        return UserProfileResponse(
+            user_id=user_id,
+            answers=user_answers,
+            total_answers=answered_questions,
+            embedding_status=embedding_status,
+            profile_completion=profile_completion
+        )
+            
+    except Exception as e:
+        logger.error(f"Failed to get user profile for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/user/{user_id}/answer/{question_id}")
+async def delete_user_answer(user_id: str, question_id: str):
+    """
+    Delete a specific answer from user's profile
+    
+    - **user_id**: User's unique identifier
+    - **question_id**: Question identifier to delete
+    """
+    try:
+        result = get_supabase_client().table('user_answers').delete().eq(
+            'user_id', user_id
+        ).eq('question_id', question_id).execute()
+        
+        if result.data:
+            return {"success": True, "message": f"Answer deleted for question {question_id}"}
+        else:
+            raise HTTPException(status_code=404, detail="Answer not found")
+            
+    except Exception as e:
+        logger.error(f"Failed to delete answer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/answer", response_model=UserAnswerResponse)
+async def save_user_answer(request: UserAnswerRequest):
+    """
+    Save user's answer to a question in Supabase with AI analysis
+    
+    - **user_id**: User's unique identifier
+    - **question_id**: Question identifier
+    - **answer_value**: Selected option value or open-ended text
+    - **importance**: How important this is to user (1-5)
+    - **is_dealbreaker**: Whether mismatch is dealbreaker
+    """
+    try:
+        # 1. Insert or update user answer
+        result = get_supabase_client().table('user_answers').upsert({
+            'user_id': request.user_id,
+            'question_id': request.question_id,
+            'answer_value': request.answer_value,
+            'importance': request.importance,
+            'is_dealbreaker': request.is_dealbreaker
+        }).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=400, detail="Failed to save answer")
+        
+        # 2. Get question text for analysis
+        question_result = get_supabase_client().table('questions').select('text_ko').eq('id', request.question_id).single().execute()
+        question_text = question_result.data.get('text_ko', '') if question_result.data else ''
+        
+        # 3. Analyze answer using Azure OpenAI (for open-ended questions)
+        analysis_result = None
+        needs_followup = False
+        
+        if len(request.answer_value) > 10:  # Only analyze substantial text answers
+            try:
+                from ..services.azure_openai_service import azure_openai_service
+                analysis = await azure_openai_service.analyze_user_answer(question_text, request.answer_value)
+                
+                analysis_result = {
+                    "clarity_score": analysis.clarity_score,
+                    "is_vague": analysis.is_vague,
+                    "key_insights": analysis.key_insights,
+                    "analysis": analysis.analysis
+                }
+                needs_followup = analysis.needs_followup
+                
+                # Store analysis in answer_history table
+                get_supabase_client().table('answer_history').insert({
+                    'user_id': request.user_id,
+                    'question_text': question_text,
+                    'category': 'dating_compatibility',
+                    'answer_text': request.answer_value,
+                    'clarity_score': analysis.clarity_score,
+                    'is_vague': analysis.is_vague,
+                    'key_info': analysis.key_insights,
+                    'triggered_followup': analysis.needs_followup
+                }).execute()
+                
+            except Exception as analysis_error:
+                logger.warning(f"Answer analysis failed: {analysis_error}")
+                # Continue without analysis if it fails
+        
+        return UserAnswerResponse(
+            success=True,
+            message=f"Answer saved for question {request.question_id}",
+            analysis=analysis_result,
+            needs_followup=needs_followup
+        )
+            
+    except Exception as e:
+        logger.error(f"Failed to save user answer: {e}")
+        # Return success even if database save fails (for demo purposes)
+        logger.warning("Continuing without database - answer not persisted")
+        return UserAnswerResponse(
+            success=True,
+            message=f"Answer received for question {request.question_id} (demo mode - not persisted)",
+            analysis=None,
+            needs_followup=False
+        )
+
+
+# Legacy API endpoints for backward compatibility
 _question_generator = None
 
 

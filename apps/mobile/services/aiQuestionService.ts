@@ -2,7 +2,7 @@
  * AI Question Service
  * 
  * Connects to FLIO AI Backend for adaptive questionnaire
- * Handles 48 questions with conditional logic and user context
+ * Handles 40 questions with conditional logic and user context
  */
 
 export interface Question {
@@ -12,12 +12,43 @@ export interface Question {
   type: 'choice' | 'text' | 'scale';
   options?: string[];
   effectiveness_score?: number;
+  placeholder?: string;
+  maxLength?: number;
 }
 
 export interface Answer {
   question_id: string;
-  answer: string;
+  answer_value: string;
+  importance?: number;
+  is_dealbreaker?: boolean;
   timestamp: string;
+  question_text?: string;
+  category?: string;
+}
+
+export interface UserProfile {
+  user_id: string;
+  answers: Answer[];
+  total_answers: number;
+  embedding_status: {
+    has_embedding: boolean;
+    embedding_dimension?: number;
+    created_at?: string;
+    message: string;
+  };
+  profile_completion: {
+    total_questions: number;
+    answered_questions: number;
+    completion_percentage: number;
+    can_start_matching: boolean;
+  };
+}
+
+export interface AnswerAnalysis {
+  clarity_score: number;
+  is_vague: boolean;
+  key_insights: string[];
+  analysis: string;
 }
 
 export interface UserContext {
@@ -30,6 +61,22 @@ export interface UserContext {
     education?: string;
     occupation?: string;
   };
+}
+
+export interface MatchResult {
+  user_id: string;
+  compatibility_score: number;
+  similarity_score: number;
+  cultural_bonus: number;
+  nickname?: string;
+  age?: number;
+}
+
+export interface MatchExplanation {
+  compatibility_score: number;
+  summary: string;
+  compatibility_reasons: string[];
+  conversation_starters: string[];
 }
 
 export interface AIQuestionResponse {
@@ -47,60 +94,371 @@ class AIQuestionService {
   private baseUrl: string;
   
   constructor() {
-    // Use localhost for development, will be replaced with actual backend URL
-    this.baseUrl = 'http://localhost:8000/api/v1';
+    this.baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    console.log('🔗 Connecting to backend at:', this.baseUrl);
   }
 
   /**
-   * Get initial 48 questions from backend
+   * Get initial 40 questions from backend
    * Returns all questions ordered by effectiveness score
    */
   async getInitialQuestions(): Promise<Question[]> {
-    try {
-      // For development, return mock questions until backend is ready
-      console.log('🔄 Loading initial questions from backend...');
-      
-      // In production, this would be:
-      // const response = await fetch(`${this.baseUrl}/questions/initial`);
-      // const data = await response.json();
-      // return data.questions;
-      
-      // Mock 48 questions for now - will be replaced with actual API call
-      return this.getMockQuestions();
-    } catch (error) {
-      console.error('Failed to load questions from backend:', error);
-      
-      // Fallback to mock questions
-      console.log('📱 Using fallback mock questions');
-      return this.getMockQuestions();
+    console.log('🔄 Loading initial questions from backend...');
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    const response = await fetch(`${this.baseUrl}/questions/initial`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Failed to load questions: ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log('✅ Successfully loaded questions from backend');
+    
+    return data.questions.map((q: any) => ({
+      id: q.id,
+      text: q.text,
+      category: q.category,
+      type: q.type,
+      options: q.options,
+      effectiveness_score: q.effectiveness_score,
+      placeholder: q.placeholder,
+      maxLength: q.maxLength
+    }));
   }
 
   /**
-   * Submit answer and get next question based on AI logic
+   * Submit answer with AI analysis
+   * Returns analysis and whether follow-up questions are needed
    */
-  async submitAnswerAndGetNext(
-    userContext: UserContext,
-    currentAnswer: Answer
-  ): Promise<Question | null> {
-    try {
-      console.log('📤 Submitting answer to AI backend:', currentAnswer);
-      
-      // In production:
-      // const response = await fetch(`${this.baseUrl}/questions/next`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ user_context: userContext, answer: currentAnswer })
-      // });
-      // const data = await response.json();
-      // return data.next_question;
-      
-      // For now, return null to use sequential progression
-      return null;
-    } catch (error) {
-      console.error('Failed to get next question:', error);
-      return null;
+  async submitAnswer(
+    userId: string,
+    questionId: string,
+    answerValue: string,
+    importance: number = 3,
+    isDealbreaker: boolean = false
+  ): Promise<{
+    success: boolean;
+    analysis?: AnswerAnalysis;
+    needs_followup?: boolean;
+    message: string;
+  }> {
+    console.log('📤 Submitting answer with AI analysis:', { questionId, answerValue });
+    
+    const response = await fetch(`${this.baseUrl}/questions/answer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        question_id: questionId,
+        answer_value: answerValue,
+        importance,
+        is_dealbreaker: isDealbreaker
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to submit answer: ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log('✅ Answer submitted successfully');
+    
+    if (data.analysis) {
+      console.log('🧠 AI Analysis:', data.analysis.analysis);
+      console.log(`📊 Clarity Score: ${data.analysis.clarity_score}/10`);
+    }
+    
+    return {
+      success: data.success,
+      analysis: data.analysis,
+      needs_followup: data.needs_followup,
+      message: data.message
+    };
+  }
+
+  /**
+   * Create user profile embedding after questionnaire completion
+   * This enables AI-powered matching
+   */
+  async createProfileEmbedding(userId: string): Promise<{
+    success: boolean;
+    message: string;
+    profile_summary?: {
+      nickname: string;
+      age: number;
+      answer_count: number;
+      embedding_dimension: number;
+    };
+  }> {
+    console.log('🧠 Creating AI profile embedding for matching...');
+    
+    const response = await fetch(`${this.baseUrl}/matching/profile/create-embedding?user_id=${userId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to create embedding: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Profile embedding created successfully');
+    console.log(`📊 Embedding dimension: ${data.profile_summary?.embedding_dimension}`);
+    
+    return {
+      success: data.success,
+      message: data.message,
+      profile_summary: data.profile_summary
+    };
+  }
+
+  /**
+   * Find compatible matches using AI similarity
+   */
+  async findMatches(
+    userId: string, 
+    limit: number = 10, 
+    minCompatibility: number = 0.3
+  ): Promise<{
+    matches: MatchResult[];
+    total_found: number;
+    error?: string;
+  }> {
+    console.log('💕 Finding AI-powered compatibility matches...');
+    
+    const response = await fetch(`${this.baseUrl}/matching/matches/${userId}?limit=${limit}&min_compatibility=${minCompatibility}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to find matches: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`✅ Found ${data.total_found} compatible matches`);
+    
+    return {
+      matches: data.matches,
+      total_found: data.total_found
+    };
+  }
+
+  /**
+   * Get detailed explanation for why two users match
+   */
+  async getMatchExplanation(userAId: string, userBId: string): Promise<{
+    explanation?: MatchExplanation;
+    error?: string;
+  }> {
+    console.log('📋 Generating AI match explanation...');
+    
+    const response = await fetch(`${this.baseUrl}/matching/match-explanation/${userAId}/${userBId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to get explanation: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Match explanation generated');
+    console.log(`💖 Compatibility: ${(data.compatibility_score * 100).toFixed(1)}%`);
+    
+    return {
+      explanation: {
+        compatibility_score: data.compatibility_score,
+        summary: data.summary,
+        compatibility_reasons: data.compatibility_reasons,
+        conversation_starters: data.conversation_starters
+      }
+    };
+  }
+
+  /**
+   * Check if user has a valid profile embedding for matching
+   */
+  async checkEmbeddingStatus(userId: string): Promise<{
+    has_embedding: boolean;
+    embedding_dimension?: number;
+    message: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/matching/profile/${userId}/embedding-status`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to check status: ${response.status}`);
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Find matches with specific user preference for reshuffling
+   */
+  async findMatchesWithPreference(
+    userId: string,
+    preference: string,
+    limit: number = 10,
+    minCompatibility: number = 0.3
+  ): Promise<{
+    matches: MatchResult[];
+    total_found: number;
+    error?: string;
+  }> {
+    console.log('🔄 Finding matches with AI preference analysis...');
+    
+    const response = await fetch(`${this.baseUrl}/matching/reshuffle-matches`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        preference: preference,
+        limit,
+        min_compatibility: minCompatibility
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to find preference matches: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`✨ Found ${data.total_found} preference-based matches`);
+    
+    return {
+      matches: data.matches,
+      total_found: data.total_found
+    };
+  }
+
+  /**
+   * Test full system connectivity: Frontend -> Backend -> Database -> AI
+   */
+  async testSystemConnectivity(): Promise<{
+    frontend: boolean;
+    backend: boolean;
+    database: boolean;
+    ai_services: boolean;
+    errors: string[];
+  }> {
+    const result = {
+      frontend: true,
+      backend: false,
+      database: false,
+      ai_services: false,
+      errors: [] as string[]
+    };
+
+    console.log('🔍 Testing backend connectivity...');
+    const healthResponse = await fetch(`${this.baseUrl.replace('/api/v1', '')}/health`, {
+      method: 'GET',
+      timeout: 5000
+    });
+    
+    if (healthResponse.ok) {
+      result.backend = true;
+      const healthData = await healthResponse.json();
+      
+      if (healthData.services?.supabase?.status === 'connected') {
+        result.database = true;
+        console.log('✅ Database connection verified');
+      } else {
+        result.errors.push('Database not connected');
+      }
+      
+      if (healthData.services?.azure_openai?.status === 'connected') {
+        result.ai_services = true;
+        console.log('✅ AI services connection verified');
+      } else {
+        result.errors.push('Azure OpenAI not connected');
+      }
+      
+      console.log('✅ Backend connectivity verified');
+    } else {
+      result.errors.push(`Backend health check failed: ${healthResponse.status}`);
+    }
+
+    return result;
+  }
+
+  /**
+   * Get user's complete profile including answers and AI status
+   */
+  async getUserProfile(userId: string): Promise<UserProfile | null> {
+    console.log('📋 Loading user profile from backend...');
+    
+    const response = await fetch(`${this.baseUrl}/questions/user/${userId}/profile`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load profile: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ User profile loaded successfully');
+    console.log(`📊 Profile: ${data.total_answers} answers, ${data.profile_completion?.completion_percentage?.toFixed(1)}% complete`);
+    
+    return data as UserProfile;
+  }
+
+  /**
+   * Delete a specific answer from user's profile
+   */
+  async deleteUserAnswer(userId: string, questionId: string): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    console.log('🗑️ Deleting user answer:', questionId);
+    
+    const response = await fetch(`${this.baseUrl}/questions/user/${userId}/answer/${questionId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to delete answer: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Answer deleted successfully');
+    
+    return {
+      success: data.success || true,
+      message: data.message || '답변이 삭제되었습니다.'
+    };
   }
 
   /**
@@ -112,384 +470,23 @@ class AIQuestionService {
     percentage: number;
   }> {
     try {
-      // In production:
-      // const response = await fetch(`${this.baseUrl}/users/${userId}/progress`);
-      // const data = await response.json();
-      // return data;
+      const profile = await this.getUserProfile(userId);
       
-      // Mock for development
-      return {
-        answered: 0,
-        total: 48,
-        percentage: 0
-      };
+      if (profile) {
+        return {
+          answered: profile.total_answers,
+          total: profile.profile_completion.total_questions,
+          percentage: profile.profile_completion.completion_percentage
+        };
+      }
+      
+      return { answered: 0, total: 40, percentage: 0 };
     } catch (error) {
       console.error('Failed to get user progress:', error);
-      return { answered: 0, total: 48, percentage: 0 };
+      return { answered: 0, total: 40, percentage: 0 };
     }
   }
 
-  /**
-   * Mock questions for development
-   * These represent the 48 questions from your schema.sql
-   */
-  private getMockQuestions(): Question[] {
-    return [
-      // Dating Style & Preferences (8 questions)
-      {
-        id: 'dating_style',
-        text: '어떤 연애 스타일이세요?',
-        category: '연애',
-        type: 'choice',
-        options: ['끈끈한 매일 연락형', '적당한 거리감 유지형', '각자 일상 존중형', '깊은 대화 중심형'],
-        effectiveness_score: 9.8
-      },
-      {
-        id: 'dating_frequency',
-        text: '연인과 얼마나 자주 만나고 싶으세요?',
-        category: '연애',
-        type: 'choice',
-        options: ['매일', '주 3-4회', '주 1-2회', '월 2-3회', '상황에 따라 자유롭게']
-      },
-      {
-        id: 'communication_style',
-        text: '연인과의 소통 방식은?',
-        category: '연애',
-        type: 'choice',
-        options: ['문자/메신저 위주', '전화 통화 선호', '직접 만나서 대화', '상황에 따라 유연하게']
-      },
-      {
-        id: 'conflict_resolution',
-        text: '연인과 갈등이 생겼을 때 어떻게 해결하세요?',
-        category: '연애',
-        type: 'choice',
-        options: ['즉시 대화로 해결', '시간을 두고 차근차근', '제3자 조언 구하기', '자연스럽게 흘러가길 기다림']
-      },
-      {
-        id: 'affection_expression',
-        text: '애정표현은 주로 어떻게 하시나요?',
-        category: '연애',
-        type: 'choice',
-        options: ['말로 표현', '행동으로 표현', '선물/서프라이즈', '신체적 접촉', '시간 함께 보내기']
-      },
-      {
-        id: 'relationship_pace',
-        text: '연애 진전 속도는 어느 정도가 적당하다고 생각하세요?',
-        category: '연애',
-        type: 'choice',
-        options: ['빠르게 진전', '보통 속도', '천천히 신중하게', '자연스러운 흐름에 맡김']
-      },
-      {
-        id: 'privacy_boundaries',
-        text: '연인의 개인 시간과 공간을 어떻게 생각하세요?',
-        category: '연애',
-        type: 'choice',
-        options: ['최대한 함께 시간 보내기', '적당한 개인시간 인정', '각자 독립적 생활 유지', '상황에 따라 조율']
-      },
-      {
-        id: 'social_media_sharing',
-        text: 'SNS에 연인과의 사진/근황 공유에 대해 어떻게 생각하세요?',
-        category: '연애',
-        type: 'choice',
-        options: ['자주 올리고 싶음', '가끔 특별한 순간만', '거의 올리지 않음', '상대방 의견 존중']
-      },
-
-      // Marriage & Future Plans (8 questions)
-      {
-        id: 'marriage_timeline',
-        text: '결혼은 언제쯤 하고 싶으세요?',
-        category: '결혼',
-        type: 'choice',
-        options: ['1년 이내', '1-2년 이내', '2-3년 이내', '3-5년 이내', '급하지 않음 (5년 이상)'],
-        effectiveness_score: 9.5
-      },
-      {
-        id: 'children_plan',
-        text: '자녀 계획은 어떻게 생각하세요?',
-        category: '결혼',
-        type: 'choice',
-        options: ['반드시 갖고 싶음', '가능하면 갖고 싶음', '없어도 괜찮음', '아직 생각 안 해봄']
-      },
-      {
-        id: 'children_count',
-        text: '자녀는 몇 명 정도가 적당하다고 생각하세요?',
-        category: '결혼',
-        type: 'choice',
-        options: ['1명', '2명', '3명 이상', '상황에 따라', '아직 정하지 않음']
-      },
-      {
-        id: 'wedding_style',
-        text: '결혼식은 어떤 스타일을 선호하세요?',
-        category: '결혼',
-        type: 'choice',
-        options: ['성대한 예식장 결혼식', '소규모 가족 결혼식', '스몰웨딩/야외결혼식', '혼인신고만', '상대방과 상의해서 결정']
-      },
-      {
-        id: 'honeymoon_preference',
-        text: '신혼여행은 어디로 가고 싶으세요?',
-        category: '결혼',
-        type: 'choice',
-        options: ['해외 장기여행', '국내 여행', '짧은 해외여행', '신혼집 준비에 집중', '아직 생각 안 해봄']
-      },
-      {
-        id: 'newlywed_home',
-        text: '신혼집은 어떻게 마련하고 싶으세요?',
-        category: '결혼',
-        type: 'choice',
-        options: ['전세/매매 독립', '부모님 도움 받아서', '렌탈/월세로 시작', '부모님댁 근처', '상황에 맞춰서']
-      },
-      {
-        id: 'marriage_preparation',
-        text: '결혼 준비에서 가장 중요하게 생각하는 것은?',
-        category: '결혼',
-        type: 'choice',
-        options: ['경제적 안정', '정서적 준비', '가족 간의 화합', '주거 문제 해결', '서로에 대한 이해']
-      },
-      {
-        id: 'life_goals_sharing',
-        text: '배우자와 인생 목표를 어느 정도 공유하고 싶으세요?',
-        category: '결혼',
-        type: 'choice',
-        options: ['대부분 함께 목표 설정', '중요한 것만 공유', '각자 목표 존중', '상황에 따라 다르게']
-      },
-
-      // Family & Relationships (8 questions)
-      {
-        id: 'parents_relationship',
-        text: '결혼 후 부모님과의 관계는 어떻게 유지하고 싶으세요?',
-        category: '가족',
-        type: 'choice',
-        options: ['자주 만나고 가까이', '적당한 거리 유지', '명절/특별한 날만', '상황에 따라 조절'],
-        effectiveness_score: 9.2
-      },
-      {
-        id: 'parents_cohabitation',
-        text: '부모님과 동거에 대해 어떻게 생각하세요?',
-        category: '가족',
-        type: 'choice',
-        options: ['처음부터 함께 살고 싶음', '나중에 모실 수 있음', '별도 거주 선호', '절대 불가능', '상황에 따라']
-      },
-      {
-        id: 'extended_family',
-        text: '상대방 가족(형제자매, 친척)과의 관계는?',
-        category: '가족',
-        type: 'choice',
-        options: ['적극적으로 가까워지고 싶음', '예의 지키며 적당히', '최소한만 만남', '상대방이 조율해줬으면']
-      },
-      {
-        id: 'family_events',
-        text: '가족 행사(생일, 기념일 등) 참여는?',
-        category: '가족',
-        type: 'choice',
-        options: ['모든 행사 참여', '중요한 것만 참여', '가능할 때만', '상대방 의견 따름']
-      },
-      {
-        id: 'holiday_plans',
-        text: '명절은 어떻게 보내고 싶으세요?',
-        category: '가족',
-        type: 'choice',
-        options: ['양가 번갈아 가며', '매년 같은 곳', '여행으로 대체', '각자 가족과', '그때그때 상의']
-      },
-      {
-        id: 'family_support',
-        text: '가족이 경제적 어려움에 처했을 때?',
-        category: '가족',
-        type: 'choice',
-        options: ['적극 도움', '능력 범위 내에서', '최소한만', '상의 후 결정']
-      },
-      {
-        id: 'parenting_style',
-        text: '자녀 교육에 대한 생각은?',
-        category: '가족',
-        type: 'choice',
-        options: ['엄격한 교육', '자유로운 교육', '균형잡힌 교육', '상황에 맞춰서', '아직 생각 안 해봄']
-      },
-      {
-        id: 'family_traditions',
-        text: '가족 전통이나 관습을 어떻게 생각하세요?',
-        category: '가족',
-        type: 'choice',
-        options: ['중요하게 지키고 싶음', '의미있는 것만', '현대적으로 변형', '크게 신경 안 씀']
-      },
-
-      // Career & Finance (8 questions)
-      {
-        id: 'dual_career',
-        text: '맞벌이에 대해 어떻게 생각하세요?',
-        category: '직장',
-        type: 'choice',
-        options: ['맞벌이 필수', '가능하면 맞벌이', '한 명이 육아/집안일', '상황에 따라', '상관없음'],
-        effectiveness_score: 9.0
-      },
-      {
-        id: 'career_priority',
-        text: '일과 가정 중 우선순위는?',
-        category: '직장',
-        type: 'choice',
-        options: ['일이 우선', '가정이 우선', '상황에 따라 조절', '균형 맞추기 노력']
-      },
-      {
-        id: 'financial_management',
-        text: '가계 재정 관리는 어떻게 하고 싶으세요?',
-        category: '재정',
-        type: 'choice',
-        options: ['완전 공동 관리', '생활비만 공동', '각자 관리', '한 명이 주도', '상의해서 결정']
-      },
-      {
-        id: 'spending_style',
-        text: '돈 쓰는 스타일은?',
-        category: '재정',
-        type: 'choice',
-        options: ['계획적/절약형', '필요한 곳에 과감히', '즉흥적/자유로움', '상황에 따라 다름']
-      },
-      {
-        id: 'financial_goals',
-        text: '경제적 목표에서 가장 중요한 것은?',
-        category: '재정',
-        type: 'choice',
-        options: ['내 집 마련', '자녀 교육비', '노후 준비', '여행/취미 생활', '비상금 마련']
-      },
-      {
-        id: 'major_purchases',
-        text: '큰 돈이 들어가는 결정은 어떻게 하세요?',
-        category: '재정',
-        type: 'choice',
-        options: ['함께 충분히 상의', '각자 자유롭게', '한 명이 주도', '상황에 따라']
-      },
-      {
-        id: 'side_income',
-        text: '부업이나 투자에 대해 어떻게 생각하세요?',
-        category: '재정',
-        type: 'choice',
-        options: ['적극 찬성', '안전한 범위에서', '반대', '상대방 의견 존중']
-      },
-      {
-        id: 'retirement_planning',
-        text: '은퇴 후 생활에 대해 어떻게 생각하세요?',
-        category: '재정',
-        type: 'choice',
-        options: ['철저한 계획', '어느 정도 준비', '그때 가서 생각', '아직 이르다고 생각']
-      },
-
-      // Lifestyle & Values (8 questions)
-      {
-        id: 'living_location',
-        text: '살고 싶은 지역은?',
-        category: '라이프스타일',
-        type: 'choice',
-        options: ['서울 도심', '서울 외곽', '수도권', '지방 대도시', '시골/자연 속', '상관없음'],
-        effectiveness_score: 8.8
-      },
-      {
-        id: 'housing_type',
-        text: '선호하는 주거 형태는?',
-        category: '라이프스타일',
-        type: 'choice',
-        options: ['아파트', '빌라/연립', '단독주택', '오피스텔', '상관없음']
-      },
-      {
-        id: 'leisure_activities',
-        text: '주말이나 여가시간에는 주로 뭘 하시나요?',
-        category: '라이프스타일',
-        type: 'choice',
-        options: ['집에서 휴식', '운동/야외활동', '문화생활', '친구들과 만남', '취미활동', '다양하게']
-      },
-      {
-        id: 'travel_frequency',
-        text: '여행은 얼마나 자주 가고 싶으세요?',
-        category: '라이프스타일',
-        type: 'choice',
-        options: ['년 3-4회 이상', '년 1-2회', '가끔 특별한 때만', '거의 안 감', '상황에 따라']
-      },
-      {
-        id: 'social_circle',
-        text: '친구들과의 만남은 어느 정도가 적당하세요?',
-        category: '라이프스타일',
-        type: 'choice',
-        options: ['자주 만남', '가끔 만남', '거의 안 만남', '상황에 따라']
-      },
-      {
-        id: 'health_lifestyle',
-        text: '건강 관리는 어떻게 하시나요?',
-        category: '라이프스타일',
-        type: 'choice',
-        options: ['규칙적 운동', '식단 관리', '정기 검진', '자연스럽게', '별로 신경 안 씀']
-      },
-      {
-        id: 'pet_preference',
-        text: '반려동물에 대해 어떻게 생각하세요?',
-        category: '라이프스타일',
-        type: 'choice',
-        options: ['꼭 키우고 싶음', '키워도 좋음', '별로 관심 없음', '절대 불가', '알레르기 있음']
-      },
-      {
-        id: 'life_values',
-        text: '인생에서 가장 중요하게 생각하는 가치는?',
-        category: '가치관',
-        type: 'choice',
-        options: ['가족', '성공/성취', '자유', '안정', '행복', '의미/가치']
-      },
-
-      // Personal Traits & Compatibility (8 questions)
-      {
-        id: 'personality_type',
-        text: '본인의 성격은 어떤 편이세요?',
-        category: '성격',
-        type: 'choice',
-        options: ['외향적', '내향적', '상황에 따라', '균형잡힌 편'],
-        effectiveness_score: 8.5
-      },
-      {
-        id: 'stress_management',
-        text: '스트레스는 어떻게 해소하세요?',
-        category: '성격',
-        type: 'choice',
-        options: ['운동', '취미활동', '사람 만나기', '혼자 시간', '수면/휴식', '다양한 방법']
-      },
-      {
-        id: 'decision_making',
-        text: '중요한 결정을 할 때는?',
-        category: '성격',
-        type: 'choice',
-        options: ['신중하게 고민', '직감을 믿음', '다른 사람과 상의', '빠르게 결정', '상황에 따라']
-      },
-      {
-        id: 'emotional_expression',
-        text: '감정 표현은 어떻게 하는 편이세요?',
-        category: '성격',
-        type: 'choice',
-        options: ['솔직하게 표현', '조금씩 표현', '거의 안 함', '상대에 따라 다름']
-      },
-      {
-        id: 'cleanliness_level',
-        text: '청소/정리정돈은 어떤 편이세요?',
-        category: '성격',
-        type: 'choice',
-        options: ['매우 깔끔', '적당히 깔끔', '조금 어수선해도 OK', '별로 신경 안 씀']
-      },
-      {
-        id: 'time_management',
-        text: '시간 약속은?',
-        category: '성격',
-        type: 'choice',
-        options: ['항상 정시/일찍', '거의 정시', '가끔 늦음', '자주 늦는 편']
-      },
-      {
-        id: 'change_adaptation',
-        text: '변화에 대해서는?',
-        category: '성격',
-        type: 'choice',
-        options: ['변화를 좋아함', '적당한 변화는 OK', '안정을 선호', '변화를 싫어함']
-      },
-      {
-        id: 'partner_ideal_type',
-        text: '이상적인 파트너는?',
-        category: '성격',
-        type: 'choice',
-        options: ['나와 비슷한 성향', '나와 다른 성향', '상호 보완적', '성격보다 가치관이 중요', '잘 모르겠음']
-      }
-    ];
-  }
 }
 
 // Export singleton instance

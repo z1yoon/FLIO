@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
-import 'react-native-url-polyfill/auto';
+import { setupURLPolyfill } from 'react-native-url-polyfill';
+
+setupURLPolyfill();
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 
 // Custom storage adapter for Expo SecureStore
 const ExpoSecureStoreAdapter = {
@@ -18,7 +20,7 @@ const ExpoSecureStoreAdapter = {
   },
 };
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     storage: ExpoSecureStoreAdapter,
     autoRefreshToken: true,
@@ -76,6 +78,12 @@ export interface Message {
   encrypted: boolean;
   read_at: string | null;
   created_at: string;
+}
+
+// Helper function to get current authenticated user ID
+export async function getCurrentUserId(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id || null;
 }
 
 export default supabase;

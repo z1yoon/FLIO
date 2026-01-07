@@ -59,8 +59,8 @@ export default function CompleteScreen() {
   }, []);
 
   const handleStart = () => {
-    // TODO: Replace with actual main app screen when available
-    router.replace('/');
+    // Navigate to matches screen to see AI-powered compatibility matches
+    router.replace('/(tabs)/matches');
   };
 
 
@@ -110,22 +110,22 @@ export default function CompleteScreen() {
           
           <View style={styles.badgeItem}>
             <View style={styles.badgeIcon}>
-              <Ionicons name="person-circle" size={24} color="#00FFC8" />
+              <Ionicons name="shield-checkmark" size={24} color="#00FFC8" />
             </View>
             <View style={styles.badgeInfo}>
-              <Text style={styles.badgeName}>프로필 완성</Text>
-              <Text style={styles.badgeDescription}>AI 질문 모두 답변 완료</Text>
+              <Text style={styles.badgeName}>얼굴 인증</Text>
+              <Text style={styles.badgeDescription}>본인 확인 완료</Text>
             </View>
             <Ionicons name="checkmark-circle" size={24} color="#00FFC8" />
           </View>
 
           <View style={styles.badgeItem}>
             <View style={styles.badgeIcon}>
-              <Ionicons name="shield-checkmark" size={24} color="#00FFC8" />
+              <Ionicons name="person-circle" size={24} color="#00FFC8" />
             </View>
             <View style={styles.badgeInfo}>
-              <Text style={styles.badgeName}>얼굴 인증</Text>
-              <Text style={styles.badgeDescription}>본인 확인 완료</Text>
+              <Text style={styles.badgeName}>프로필 완성</Text>
+              <Text style={styles.badgeDescription}>AI 질문 모두 답변 완료</Text>
             </View>
             <Ionicons name="checkmark-circle" size={24} color="#00FFC8" />
           </View>

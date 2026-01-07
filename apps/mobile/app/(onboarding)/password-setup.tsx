@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
+import { supabase } from '../../services/supabase/client';
 
 const { width } = Dimensions.get('window');
 
@@ -24,6 +25,7 @@ const { width } = Dimensions.get('window');
  */
 export default function PasswordSetupScreen() {
   const params = useLocalSearchParams();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -52,7 +54,15 @@ export default function PasswordSetupScreen() {
     ]).start();
   }, []);
 
-  const validatePassword = () => {
+  const validateForm = () => {
+    // Validate email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      FLIOAlertAPI.alert('이메일 오류', '올바른 이메일 주소를 입력해주세요.');
+      return false;
+    }
+    
+    // Validate password
     if (password.length < 6) {
       FLIOAlertAPI.alert('비밀번호 오류', '비밀번호는 최소 6자리 이상이어야 합니다.');
       return false;
@@ -65,19 +75,81 @@ export default function PasswordSetupScreen() {
   };
 
   const handleCreateAccount = async () => {
-    if (!validatePassword()) return;
+    if (!validateForm()) return;
 
     setIsLoading(true);
     try {
-      // TODO: Create account with phone number + password
-      console.log('Creating account:', { phone: userPhone, password });
+      console.log('Creating Supabase Auth account:', { email, phone: userPhone });
       
-      // Simulate account creation
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Create Supabase Auth user with actual email address
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+        options: {
+          data: {
+            name: userName,
+            phone: userPhone,
+            birth_date: params.birthDate as string,
+            gender: params.gender as string,
+            age: params.age as string,
+            ci: params.ci as string,
+            di: params.di as string
+          }
+        }
+      });
+
+      if (authError) {
+        console.error('Supabase Auth error:', authError);
+        console.error('Error details:', {
+          message: authError.message,
+          status: authError.status,
+          code: authError.code
+        });
+        
+        // Provide more helpful error message
+        if (authError.message?.includes('Email signups are disabled')) {
+          throw new Error('이메일 가입이 비활성화되어 있습니다. Supabase 대시보드에서 이메일 제공자를 활성화해주세요.');
+        }
+        
+        throw new Error(authError.message);
+      }
+
+      if (!authData.user) {
+        throw new Error('계정 생성에 실패했습니다.');
+      }
+
+      const userId = authData.user.id;
+      const isEmailConfirmed = authData.user.email_confirmed_at !== null;
+      
+      console.log('✅ Account created with UUID:', userId);
+      console.log('📧 Email confirmed:', isEmailConfirmed);
+      
+      // Auto-confirm email via backend if not confirmed
+      if (!isEmailConfirmed) {
+        try {
+          const backendUrl = process.env.EXPO_PUBLIC_AI_BACKEND_URL || 'http://localhost:8000';
+          const confirmResponse = await fetch(`${backendUrl}/api/v1/auth/confirm-email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ user_id: userId }),
+          });
+          
+          if (confirmResponse.ok) {
+            console.log('✅ Email auto-confirmed via backend');
+          } else {
+            console.warn('⚠️ Failed to auto-confirm email, but continuing...');
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not auto-confirm email (backend may be unavailable):', error);
+          // Continue anyway - user can still proceed
+        }
+      }
       
       // Show success popup before navigating
       const faceVerificationParams = new URLSearchParams({
-        userId: params.userId as string,
+        userId: userId,
         name: userName,
         age: params.age as string,
         gender: params.gender as string,
@@ -100,9 +172,9 @@ export default function PasswordSetupScreen() {
         ]
       );
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Account creation error:', error);
-      FLIOAlertAPI.alert('계정 생성 오류', '계정 생성 중 문제가 발생했습니다.');
+      FLIOAlertAPI.alert('계정 생성 오류', error.message || '계정 생성 중 문제가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -147,15 +219,29 @@ export default function PasswordSetupScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>비밀번호 설정</Text>
+            <Text style={styles.title}>계정 생성</Text>
             <Text style={styles.subtitle}>
-              {userName}님의 계정 비밀번호를 설정해주세요
+              {userName}님의 계정 정보를 입력해주세요
             </Text>
             <Text style={styles.phoneText}>전화번호: {userPhone}</Text>
           </View>
 
-          {/* Password Form */}
+          {/* Form */}
           <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <Ionicons name="mail-outline" size={20} color="rgba(255, 255, 255, 0.7)" />
+              <TextInput
+                style={styles.input}
+                placeholder="이메일 주소"
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
             <View style={styles.inputContainer}>
               <Ionicons name="lock-closed-outline" size={20} color="rgba(255, 255, 255, 0.7)" />
               <TextInput
@@ -199,9 +285,9 @@ export default function PasswordSetupScreen() {
 
           {/* Create Account Button */}
           <TouchableOpacity
-            style={[styles.primaryButton, (!password || !confirmPassword || isLoading) && styles.primaryButtonDisabled]}
+            style={[styles.primaryButton, (!email || !password || !confirmPassword || isLoading) && styles.primaryButtonDisabled]}
             onPress={handleCreateAccount}
-            disabled={!password || !confirmPassword || isLoading}
+            disabled={!email || !password || !confirmPassword || isLoading}
             activeOpacity={0.8}
           >
             <LinearGradient

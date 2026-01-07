@@ -17,22 +17,20 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { aiQuestionService, Question, UserContext, Answer } from '../../services/aiQuestionService';
+import { supabaseQuestionService, Question, Answer } from '../../services/supabaseQuestionService';
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
+import { supabase, getCurrentUserId } from '../../services/supabase/client';
 
 const { width, height } = Dimensions.get('window');
 
 // Generate unique user ID for this session
 const generateUserId = () => `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-// Helper to create initial user context
-const createUserContext = (userId: string, previousAnswers: Answer[] = []): UserContext => ({
-  user_id: userId,
-  previous_answers: previousAnswers,
-  demographics: {
-    // Can be populated from registration data
-  },
-});
+// Helper to track user answers locally
+interface AnswerContext {
+  user_id: string;
+  previous_answers: Answer[];
+}
 
 /**
  * AI Question Screen
@@ -42,12 +40,14 @@ const createUserContext = (userId: string, previousAnswers: Answer[] = []): User
  */
 export default function QuestionsScreen() {
   const params = useLocalSearchParams();
-  const userId = params.userId as string;
   
   // Korean identity data from verification
   const userName = params.name as string;
   const userAge = params.age as string;
   const userGender = params.gender as string;
+  
+  // Get authenticated user ID from Supabase Auth
+  const [userId, setUserId] = useState<string | null>(null);
   
   // AI-driven state management
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -56,7 +56,7 @@ export default function QuestionsScreen() {
     const backIndex = params.currentQuestionIndex as string;
     return backIndex ? parseInt(backIndex) : 0;
   });
-  const [userContext, setUserContext] = useState<UserContext>(() => createUserContext(userId));
+  const [answersContext, setAnswersContext] = useState<AnswerContext>({ user_id: '', previous_answers: [] });
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(true);
   const [textAnswer, setTextAnswer] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -70,83 +70,181 @@ export default function QuestionsScreen() {
   const progress = questions.length > 0 ? (currentQuestionIndex + 1) / questions.length : 0;
 
 
-  // Load initial questions from AI backend (only after phone verification)
-  const loadInitialQuestions = async () => {
-    try {
-      setIsLoadingQuestion(true);
-      
-      // Check if user came from phone verification
-      if (!params.userId) {
-        console.log('⚠️ No phone verification - redirecting to phone verification');
-        router.replace('/(onboarding)/phone-verification');
-        return;
-      }
-      
-      const initialQuestions = await aiQuestionService.getInitialQuestions();
-      
-      setQuestions(initialQuestions); // All 48 questions from backend
-    } catch (error) {
-      console.error('❌ Failed to load initial questions:', error);
-      FLIOAlertAPI.alert('연결 오류', 'AI 서비스 연결에 문제가 있습니다. 다시 시도해주세요.');
-    } finally {
-      setIsLoadingQuestion(false);
-    }
-  };
-
-  // Simple sequential question progression
-  const processAnswerAndGetNext = async (answer: string) => {
-    if (!currentQuestion) return;
-
-    try {
-      setIsLoadingQuestion(true);
-
-      // Store the answer
-      const newAnswer: Answer = {
-        question_id: currentQuestion.id,
-        answer: answer,
-        timestamp: new Date().toISOString(),
-      };
-
-      const updatedContext: UserContext = {
-        ...userContext,
-        previous_answers: [...userContext.previous_answers, newAnswer],
-      };
-
-      setUserContext(updatedContext);
-
-      // Simple progression: go to next question in the array
-      if (currentQuestionIndex < questions.length - 1) {
-        // Move to next question
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
+  // Get authenticated user ID on mount
+  useEffect(() => {
+    const fetchUserId = async () => {
+      const currentUserId = await getCurrentUserId();
+      if (currentUserId) {
+        setUserId(currentUserId);
+        setAnswersContext(prev => ({ ...prev, user_id: currentUserId }));
+        // Load questions after getting user ID
+        loadInitialQuestions(currentUserId);
+      } else if (params.userId) {
+        // Validate UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(params.userId as string)) {
+          // Valid UUID from password setup
+          setUserId(params.userId as string);
+          setAnswersContext(prev => ({ ...prev, user_id: params.userId as string }));
+          loadInitialQuestions(params.userId as string);
+        } else {
+          console.error('❌ Invalid user ID format (not UUID):', params.userId);
+          FLIOAlertAPI.alert('오류', '유효하지 않은 사용자 ID입니다. 다시 로그인해주세요.');
+          router.replace('/(onboarding)/phone-verification');
+        }
       } else {
-        // All questions completed, redirect to onboarding complete with all params
+        console.log('⚠️ No authenticated user - redirecting to phone verification');
+        router.replace('/(onboarding)/phone-verification');
+      }
+    };
+    fetchUserId();
+  }, []);
+
+  // Load questions from Supabase (only after phone verification)
+  const loadInitialQuestions = async (currentUserId: string) => {
+    try {
+      setIsLoadingQuestion(true);
+      
+      // Get user's current progress
+      const userProfile = await supabaseQuestionService.getUserProfile(currentUserId);
+      const answeredCount = userProfile?.total_answers || 0;
+      const completionPercentage = userProfile?.profile_completion.completion_percentage || 0;
+      
+      console.log(`📊 Resuming profile completion: ${answeredCount} answers (${completionPercentage.toFixed(1)}%)`);
+      
+      // Load unanswered questions from Supabase
+      const unansweredQuestions = await supabaseQuestionService.getUnansweredQuestions(currentUserId);
+      
+      if (unansweredQuestions.length === 0) {
+        // All questions completed - go to complete screen
+        console.log('✅ All questions already completed!');
         router.replace({
           pathname: '/(onboarding)/complete',
           params: { 
-            userId: userId,
+            userId: currentUserId,
             name: userName,
             age: userAge,
-            gender: userGender
+            gender: userGender,
+            hasAIProfile: 'true'
           }
         });
+        return;
       }
-
+      
+      setQuestions(unansweredQuestions);
+      console.log(`📝 Loaded ${unansweredQuestions.length} unanswered questions (continuing from ${answeredCount} answered)`);
+      
+      // Show resumption message for existing users
+      if (answeredCount > 0) {
+        FLIOAlertAPI.alert(
+          '프로필 완성 재개',
+          `이전에 답변하신 ${answeredCount}개 질문에서 이어서 진행합니다.`,
+          [{ text: '계속하기', onPress: () => {} }]
+        );
+      }
     } catch (error) {
-      console.error('Failed to process answer:', error);
-      FLIOAlertAPI.alert('오류', '답변 처리 중 문제가 발생했습니다.');
+      console.error('❌ Failed to load questions from Supabase:', error);
+      FLIOAlertAPI.alert('연결 오류', 'Supabase 연결에 문제가 있습니다. 다시 시도해주세요.');
     } finally {
       setIsLoadingQuestion(false);
     }
   };
 
-  // Initialize questions when component mounts
+  // Production answer processing with Supabase integration
+  const processAnswerAndGetNext = async (answer: string, importance: number = 3, isDealbreaker: boolean = false) => {
+    if (!currentQuestion || !userId) {
+      console.error('❌ Cannot process answer: missing question or user ID');
+      return;
+    }
+
+    try {
+      setIsLoadingQuestion(true);
+
+      // Submit answer to Supabase database
+      const result = await supabaseQuestionService.submitAnswer(
+        userId,
+        currentQuestion.id,
+        answer,
+        importance,
+        isDealbreaker
+      );
+
+      if (result.success) {
+        // Store the answer locally in context
+        const newAnswer: Answer = {
+          question_id: currentQuestion.id,
+          answer_value: answer,
+          importance,
+          is_dealbreaker: isDealbreaker,
+          timestamp: new Date().toISOString(),
+        };
+
+        const updatedContext: AnswerContext = {
+          ...answersContext,
+          previous_answers: [...answersContext.previous_answers, newAnswer],
+        };
+
+        setAnswersContext(updatedContext);
+
+        // Progress to next question or complete
+        if (currentQuestionIndex < questions.length - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+          setTextAnswer(''); // Clear text input
+        } else {
+          // All questions completed - check profile status
+          console.log('🎯 All questions completed! Checking profile status...');
+          
+          try {
+            // Get user profile to check completion status
+            const userProfile = await supabaseQuestionService.getUserProfile(userId);
+            const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
+            const completionPercentage = userProfile?.profile_completion.completion_percentage || 0;
+            
+            console.log(`✅ Profile completed: ${completionPercentage.toFixed(1)}% (${userProfile?.total_answers} answers)`);
+            
+            // Go directly to completion screen
+            router.replace({
+              pathname: '/(onboarding)/complete',
+              params: { 
+                userId: userId,
+                name: userName,
+                age: userAge,
+                gender: userGender,
+                hasAIProfile: canStartMatching ? 'true' : 'false',
+                completionPercentage: completionPercentage.toString()
+              }
+            });
+          } catch (profileError) {
+            console.error('Profile check failed:', profileError);
+            // Continue even if profile check fails
+            router.replace({
+              pathname: '/(onboarding)/complete',
+              params: { 
+                userId: userId,
+                name: userName,
+                age: userAge,
+                gender: userGender
+              }
+            });
+          }
+        }
+      } else {
+        FLIOAlertAPI.alert('오류', result.message || '답변 저장 중 문제가 발생했습니다.');
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to process answer:', error);
+      FLIOAlertAPI.alert('연결 오류', 'Supabase 연결에 문제가 있습니다. 다시 시도해주세요.');
+    } finally {
+      setIsLoadingQuestion(false);
+    }
+  };
+
+  // Initialize screen reader check
   useEffect(() => {
-    // Check screen reader status
     AccessibilityInfo.isScreenReaderEnabled().then(screenReaderEnabled => {
       setIsScreenReaderEnabled(screenReaderEnabled);
     });
-    
-    loadInitialQuestions();
   }, []);
 
 
@@ -313,7 +411,7 @@ export default function QuestionsScreen() {
             </>
           ) : isLoadingQuestion ? (
             <>
-              <Text style={styles.categoryLabel}>AI 질문 생성 중...</Text>
+              <Text style={styles.categoryLabel}>질문 불러오는 중...</Text>
               <Text style={styles.questionText}>다음 질문을 준비하고 있습니다</Text>
             </>
           ) : (
@@ -360,37 +458,67 @@ export default function QuestionsScreen() {
           </Animated.View>
         )}
 
-        {/* Text Input */}
+        {/* Open-ended Question Input */}
         {currentQuestion && currentQuestion.type === 'text' && (
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={[styles.textInput, isLoadingQuestion && styles.textInputDisabled]}
-              value={textAnswer}
-              onChangeText={setTextAnswer}
-              placeholder="답변을 입력해주세요..."
-              placeholderTextColor="rgba(255, 255, 255, 0.4)"
-              multiline
-              editable={!isLoadingQuestion}
-              accessible={true}
-              accessibilityLabel="텍스트 답변 입력"
-              accessibilityHint="여기에 자세한 답변을 입력하세요"
-            />
-            <TouchableOpacity
-              style={styles.sendButton}
-              onPress={handleNext}
-              disabled={!textAnswer.trim() || isLoadingQuestion}
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel="답변 전송"
-              accessibilityHint="작성한 답변을 전송하고 다음 질문으로 넘어갑니다"
-            >
-              <Ionicons
-                name="send"
-                size={24}
-                color={textAnswer.trim() && !isLoadingQuestion ? '#4FD1C7' : 'rgba(255, 255, 255, 0.3)'}
+          <Animated.View style={[styles.openEndedContainer, { opacity: fadeAnim }]}>
+            <View style={styles.textInputWrapper}>
+              {currentQuestion.placeholder && (
+                <Text style={styles.placeholderGuide}>
+                  {currentQuestion.placeholder}
+                </Text>
+              )}
+              <TextInput
+                style={[styles.textInput, isLoadingQuestion && styles.textInputDisabled]}
+                value={textAnswer}
+                onChangeText={setTextAnswer}
+                placeholder="터치해서 답변을 입력하세요..."
+                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                multiline
+                textAlignVertical="top"
+                editable={!isLoadingQuestion}
+                maxLength={currentQuestion.maxLength || 500}
+                accessible={true}
+                accessibilityLabel="개방형 질문 답변 입력"
+                accessibilityHint="여기에 자세한 답변을 입력하세요"
               />
-            </TouchableOpacity>
-          </View>
+              <View style={styles.textInputFooter}>
+                <Text style={styles.characterCount}>
+                  {textAnswer.length}/{currentQuestion.maxLength || 500}
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.submitTextButton,
+                    (!textAnswer.trim() || isLoadingQuestion) && styles.submitButtonDisabled
+                  ]}
+                  onPress={handleNext}
+                  disabled={!textAnswer.trim() || isLoadingQuestion}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="답변 제출"
+                  accessibilityHint="작성한 답변을 제출하고 다음 질문으로 넘어갑니다"
+                >
+                  {isLoadingQuestion ? (
+                    <Text style={styles.submitButtonText}>처리중...</Text>
+                  ) : (
+                    <>
+                      <Text style={styles.submitButtonText}>다음</Text>
+                      <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {/* Helpful Tips for Open-ended Questions */}
+            <View style={styles.helpTips}>
+              <Text style={styles.helpTipsTitle}>💡 작성 팁</Text>
+              <Text style={styles.helpTipsText}>
+                • 솔직하고 구체적으로 표현해주세요{'\n'}
+                • 본인의 경험이나 생각을 자유롭게 써주세요{'\n'}
+                • 더 나은 매칭을 위해 진실된 답변을 부탁드려요
+              </Text>
+            </View>
+          </Animated.View>
         )}
 
         {/* Voice Input Button - Show only for screen reader users */}
@@ -422,19 +550,27 @@ export default function QuestionsScreen() {
 
 function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
-    결혼: '💍 결혼 계획',
-    가족: '👨‍👩‍👧 가족',
-    재정: '💰 경제',
-    종교: '🕊️ 종교',
-    직장: '💼 직업',
-    라이프스타일: '🏃 라이프스타일',
-    성격: '🎭 성격',
-    접근성: '♿ 접근성',
-    marriage: '💍 결혼 계획',
-    values: '💎 가치관',
-    family: '👨‍👩‍👧 가족',
-    finance: '💰 경제',
-    lifestyle: '🏃 라이프스타일',
+    'MBTI성향': '🧠 MBTI 성향',
+    '갈등해결': '💬 갈등해결',
+    '가족관계': '👨‍👩‍👧 가족관계',
+    '재정관리': '💰 재정관리',
+    '감정지원': '❤️ 감정지원',
+    '미래계획': '🎯 미래계획',
+    '친밀감': '💕 친밀감',
+    '소통방식': '🗣️ 소통방식',
+    '결혼계획': '💍 결혼계획',
+    '가족가치관': '🏠 가족가치관',
+    '라이프스타일': '🏃 라이프스타일',
+    '경제관념': '💼 경제관념',
+    '애착스타일': '🤝 애착스타일',
+    '성격': '🎭 성격',
+    '가치관': '💎 가치관',
+    // Legacy support
+    결혼: '💍 결혼계획',
+    가족: '🏠 가족가치관',
+    재정: '💼 경제관념',
+    연애: '💕 애착스타일',
+    직장: '💼 경제관념'
   };
   return labels[category] || category;
 }
@@ -596,6 +732,83 @@ const styles = StyleSheet.create({
     color: '#4FD1C7',
     fontWeight: '600',
   },
+  // Open-ended question styles
+  openEndedContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+  },
+  textInputWrapper: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(79, 209, 199, 0.3)',
+  },
+  placeholderGuide: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginBottom: 12,
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  textInput: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    minHeight: 120,
+    textAlignVertical: 'top',
+    lineHeight: 22,
+  },
+  textInputFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  characterCount: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  submitTextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4FD1C7',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    gap: 6,
+  },
+  submitButtonDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  submitButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  helpTips: {
+    marginTop: 16,
+    backgroundColor: 'rgba(79, 209, 199, 0.08)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4FD1C7',
+  },
+  helpTipsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4FD1C7',
+    marginBottom: 6,
+  },
+  helpTipsText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    lineHeight: 16,
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -604,12 +817,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#FFFFFF',
-    maxHeight: 120,
   },
   sendButton: {
     marginLeft: 12,
