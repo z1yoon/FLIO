@@ -46,40 +46,49 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- Fix 2: Get questions for user
+-- Fix 2: Get unanswered questions for user (with answered status)
 -- ==========================================
+-- Drop existing function first to change return type
 DROP FUNCTION IF EXISTS get_questions_for_user(UUID, INTEGER);
 
-CREATE OR REPLACE FUNCTION get_questions_for_user(
+CREATE FUNCTION get_questions_for_user(
     p_user_id UUID,
-    p_limit INTEGER DEFAULT 10
+    p_limit INTEGER DEFAULT 40
 )
 RETURNS TABLE (
-    question_id VARCHAR,
-    category VARCHAR,
+    question_id VARCHAR(100),
     question_text TEXT,
-    answer_type VARCHAR,
+    category VARCHAR(50),
+    answer_type VARCHAR(50),
     options JSONB,
     base_weight FLOAT,
-    effectiveness_score FLOAT
+    effectiveness_score FLOAT,
+    is_answered BOOLEAN
 ) AS $$
+DECLARE
+    user_lang VARCHAR;
 BEGIN
+    -- Get user's language preference
+    SELECT language INTO user_lang FROM public.user_settings WHERE user_id = p_user_id;
+    user_lang := COALESCE(user_lang, 'ko');
+    
     RETURN QUERY
     SELECT 
-        q.id,
+        q.id as question_id,
+        CASE WHEN user_lang = 'en' THEN q.text_en ELSE q.text_ko END as question_text,
         q.category,
-        CASE 
-            WHEN EXISTS (SELECT 1 FROM user_settings WHERE user_id = p_user_id AND language = 'en')
-            THEN q.text_en
-            ELSE q.text_ko
-        END as question_text,
         q.answer_type,
         q.options,
         q.base_weight,
-        q.effectiveness_score
+        q.effectiveness_score,
+        (ua.question_id IS NOT NULL) as is_answered
     FROM public.questions q
+    LEFT JOIN public.user_answers ua ON (q.id = ua.question_id AND ua.user_id = p_user_id)
     WHERE q.is_active = TRUE
-    ORDER BY q.effectiveness_score DESC
+    ORDER BY 
+        CASE WHEN ua.question_id IS NULL THEN 0 ELSE 1 END,  -- Unanswered first
+        q.effectiveness_score DESC,
+        q.id
     LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql;
@@ -90,15 +99,17 @@ $$ LANGUAGE plpgsql;
 -- Drop if exists to avoid conflicts
 DROP FUNCTION IF EXISTS get_user_profile_summary(UUID);
 
-CREATE OR REPLACE FUNCTION get_user_profile_summary(p_user_id UUID)
+CREATE FUNCTION get_user_profile_summary(
+    p_user_id UUID
+)
 RETURNS TABLE (
     user_id UUID,
-    nickname VARCHAR,
+    nickname VARCHAR(50),
     age INTEGER,
-    gender VARCHAR,
-    bio TEXT,
-    photos TEXT[],
-    has_embedding BOOLEAN
+    gender VARCHAR(10),
+    total_answers INTEGER,
+    has_embedding BOOLEAN,
+    last_updated TIMESTAMPTZ
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -107,10 +118,17 @@ BEGIN
         p.nickname,
         DATE_PART('year', AGE(p.birth_date))::INTEGER as age,
         p.gender,
-        p.bio,
-        p.photos,
-        (p.profile_embedding_v2 IS NOT NULL) as has_embedding
+        COALESCE(answer_counts.total_answers, 0) as total_answers,
+        (p.profile_embedding_v2 IS NOT NULL) as has_embedding,
+        p.updated_at as last_updated
     FROM public.profiles p
+    LEFT JOIN (
+        SELECT 
+            ua.user_id,
+            COUNT(*) as total_answers
+        FROM public.user_answers ua
+        GROUP BY ua.user_id
+    ) answer_counts ON p.user_id = answer_counts.user_id
     WHERE p.user_id = p_user_id;
 END;
 $$ LANGUAGE plpgsql;
@@ -146,8 +164,12 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- Fix 5: Add indexes for performance
+-- Fix 5: Add indexes for performance  
 -- ==========================================
+
+-- Index for user answers performance
+CREATE INDEX IF NOT EXISTS idx_user_answers_user_question 
+ON public.user_answers(user_id, question_id);
 
 -- Index for profiles with embeddings
 CREATE INDEX IF NOT EXISTS idx_profiles_has_embedding 
@@ -194,6 +216,7 @@ LEFT JOIN (
     SELECT 
         ua.user_id,
         COUNT(*) as total_answers
+    FROM public.user_answers ua
     GROUP BY ua.user_id
 ) answer_counts ON p.user_id = answer_counts.user_id
 WHERE p.is_active = TRUE;
@@ -222,7 +245,9 @@ COMMENT ON FUNCTION store_profile_embedding IS
 -- ==========================================
 
 -- Function: Get User Answers with Metadata
+DROP FUNCTION IF EXISTS get_user_answers_with_metadata(UUID);
 
+CREATE OR REPLACE FUNCTION get_user_answers_with_metadata(p_user_id UUID)
 RETURNS TABLE (
     question_id VARCHAR(100),
     answer_value VARCHAR(100),
@@ -246,6 +271,7 @@ BEGIN
         q.category,
         q.base_weight,
         q.effectiveness_score
+    FROM user_answers ua
     JOIN questions q ON ua.question_id = q.id
     WHERE ua.user_id = p_user_id
     ORDER BY q.effectiveness_score DESC;
@@ -280,6 +306,8 @@ BEGIN
                 WHEN ua.answer_value = ub.answer_value THEN 1.0
                 ELSE 0.0
             END as match_score
+        FROM user_answers ua
+        JOIN user_answers ub ON ua.question_id = ub.question_id
         JOIN questions q ON ua.question_id = q.id
         WHERE ua.user_id = p_user_a_id
           AND ub.user_id = p_user_b_id
@@ -351,6 +379,17 @@ BEGIN
                 0.5
             ) as choice_score
         FROM candidate_profiles cp
+    ),
+    dealbreaker_check AS (
+        SELECT 
+            ub.user_id,
+            COUNT(*) > 0 as has_conflict
+        FROM user_answers ua
+        JOIN user_answers ub ON ua.question_id = ub.question_id
+        WHERE ua.user_id = exclude_user_id
+          AND ua.is_dealbreaker = true
+          AND ua.answer_value != ub.answer_value
+        GROUP BY ub.user_id
     )
     SELECT 
         cp.user_id,
@@ -372,10 +411,20 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Grant Permissions
+GRANT EXECUTE ON FUNCTION get_user_answers_with_metadata(UUID) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION calculate_choice_compatibility(UUID, UUID) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION find_similar_profiles_v2(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER) TO authenticated, service_role;
 
 -- Create Indexes for Performance
+CREATE INDEX IF NOT EXISTS idx_user_answers_dealbreaker ON user_answers(question_id) WHERE is_dealbreaker = true;
 CREATE INDEX IF NOT EXISTS idx_questions_answer_type ON questions(answer_type);
+
+-- Update Documentation
+COMMENT ON FUNCTION get_user_answers_with_metadata IS 
+'Returns user answers with question metadata for matching algorithm';
+
+COMMENT ON FUNCTION calculate_choice_compatibility IS 
+'Calculates compatibility score based on choice-type questions with match_weight';
 
 COMMENT ON FUNCTION find_similar_profiles_v2 IS 
 'Hybrid matching algorithm - 50% choice questions + 40% embeddings + 10% bonus. Includes dealbreaker filtering.';
