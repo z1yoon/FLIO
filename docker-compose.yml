@@ -1,0 +1,58 @@
+# FLIO Complete System - One Command Deployment
+
+services:
+  # AI Backend Service
+  ai-backend:
+    build:
+      context: ./services/ai-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./services/ai-backend/.env
+    environment:
+      # Python Configuration
+      - PYTHONUNBUFFERED=1
+      - PYTHONIOENCODING=utf-8
+      
+      # Performance Settings
+      - MAX_WORKERS=2
+      - WEB_CONCURRENCY=2
+      
+    volumes:
+      # Mount source code for development hot reload
+      - ./services/ai-backend/app:/app/app
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - flio-network
+
+  # Redis Cache for Performance
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+    restart: unless-stopped
+    networks:
+      - flio-network
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  flio-network:
+    driver: bridge

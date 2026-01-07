@@ -2,13 +2,11 @@
 -- Supabase PostgreSQL with pgvector extension
 
 -- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Users table (extends Supabase auth.users)
 CREATE TABLE public.profiles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     
     -- Basic info
     nickname VARCHAR(50) NOT NULL,
@@ -46,7 +44,7 @@ CREATE TABLE public.profiles (
 
 -- Verifications table
 CREATE TABLE public.verifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     
     type VARCHAR(20) NOT NULL CHECK (type IN ('face', 'height', 'education', 'job', 'income')),
@@ -64,7 +62,7 @@ CREATE TABLE public.verifications (
 
 -- Matches table
 CREATE TABLE public.matches (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     user_a_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     user_b_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -89,7 +87,7 @@ CREATE TABLE public.matches (
 
 -- Messages table (E2EE - content is encrypted)
 CREATE TABLE public.messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     match_id UUID NOT NULL REFERENCES public.matches(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     
@@ -105,7 +103,7 @@ CREATE TABLE public.messages (
 
 -- Community verification feedback (after meeting)
 CREATE TABLE public.meeting_feedback (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     reviewer_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     reviewed_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

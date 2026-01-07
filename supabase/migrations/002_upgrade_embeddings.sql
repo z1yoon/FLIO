@@ -8,7 +8,7 @@ ADD COLUMN IF NOT EXISTS profile_embedding_v2 vector(1024);
 -- Step 2: Add reshuffle history table
 -- Tracks when users reshuffle and why (for AI analysis)
 CREATE TABLE IF NOT EXISTS public.reshuffle_history (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     
     -- Reason categories
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS public.reshuffle_history (
 -- Step 3: Add profile answer history table
 -- Tracks all answers for adaptive questioning
 CREATE TABLE IF NOT EXISTS public.answer_history (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     
     -- Question context

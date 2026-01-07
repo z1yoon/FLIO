@@ -6,7 +6,7 @@
 -- User Settings Table (Language, Accessibility)
 -- ==========================================
 CREATE TABLE IF NOT EXISTS user_settings (
-    user_id UUID PRIMARY KEY REFERENCES profiles(user_id),
+    user_id UUID PRIMARY KEY REFERENCES profiles(id),
     language VARCHAR(5) NOT NULL DEFAULT 'ko' CHECK (language IN ('ko', 'en')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS questions (
     answer_type VARCHAR(50) NOT NULL, -- single_select, scale_1_5, yes_no
     options JSONB NOT NULL, -- [{value, text_ko, text_en, match_weight}]
     base_weight FLOAT DEFAULT 0.5,
-    effectiveness_score FLOAT DEFAULT 5.0,
     can_be_dealbreaker BOOLEAN DEFAULT false,
     follow_ups JSONB, -- {answer_value: [question_ids]}
     requires VARCHAR(100) REFERENCES questions(id),
@@ -40,7 +39,7 @@ CREATE INDEX idx_questions_weight ON questions(base_weight DESC);
 -- ==========================================
 CREATE TABLE IF NOT EXISTS user_answers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES profiles(user_id),
+    user_id UUID NOT NULL REFERENCES profiles(id),
     question_id VARCHAR(100) NOT NULL REFERENCES questions(id),
     answer_value VARCHAR(100) NOT NULL, -- Selected option value
     importance INTEGER DEFAULT 3 CHECK (importance BETWEEN 1 AND 5), -- How important to user
@@ -293,7 +292,7 @@ INSERT INTO questions (id, category, text_ko, text_en, answer_type, options, bas
    {"value": "avoid", "text_ko": "가능하면 갈등 피함", "text_en": "Avoid conflict if possible", "match_weight": 0.4},
    {"value": "wait", "text_ko": "상대가 먼저 말할 때까지 기다림", "text_en": "Wait for other to initiate", "match_weight": 0.2}
  ]'::jsonb,
- 0.7, false, NULL, ARRAY['성격', '갈등']);
+ 0.7, false, NULL, ARRAY['성격', '갈등']),
 
 -- ==========================================
 -- FUNCTIONS

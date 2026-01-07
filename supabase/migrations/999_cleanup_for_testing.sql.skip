@@ -1,0 +1,88 @@
+-- ==========================================
+-- FLIO Database Cleanup Script
+-- ==========================================
+-- Use this to reset the database for fresh testing
+-- WARNING: This will delete ALL user data!
+-- ==========================================
+
+-- Disable triggers temporarily for faster deletion
+SET session_replication_role = 'replica';
+
+-- ==========================================
+-- 1. Delete User Data (in correct order to respect foreign keys)
+-- ==========================================
+
+-- Delete user answers first (references users and questions)
+DELETE FROM user_answers WHERE EXISTS (SELECT 1 FROM user_answers LIMIT 1);
+
+-- Delete user profiles (references users)
+DELETE FROM user_profiles WHERE EXISTS (SELECT 1 FROM user_profiles LIMIT 1);
+
+-- Delete question performance tracking
+DELETE FROM question_performance WHERE EXISTS (SELECT 1 FROM question_performance LIMIT 1);
+
+-- Delete user feedback
+DELETE FROM user_feedback WHERE EXISTS (SELECT 1 FROM user_feedback LIMIT 1);
+
+-- Delete profiles (main user profile data)
+DELETE FROM profiles WHERE EXISTS (SELECT 1 FROM profiles LIMIT 1);
+
+-- ==========================================
+-- 2. Reset Sequences (for auto-incrementing IDs if any)
+-- ==========================================
+
+-- No sequences to reset in current schema
+
+-- ==========================================
+-- 3. Reinitialize Question Performance Tracking
+-- ==========================================
+
+-- Recreate performance tracking for all questions
+INSERT INTO question_performance (question_id)
+SELECT id FROM questions
+ON CONFLICT (question_id) DO NOTHING;
+
+-- ==========================================
+-- 4. Re-enable Triggers
+-- ==========================================
+
+SET session_replication_role = 'origin';
+
+-- ==========================================
+-- 5. Verify Cleanup
+-- ==========================================
+
+-- Check that all user data is cleared
+DO $$
+DECLARE
+    v_user_answers_count INTEGER;
+    v_user_profiles_count INTEGER;
+    v_profiles_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_user_answers_count FROM user_answers;
+    SELECT COUNT(*) INTO v_user_profiles_count FROM user_profiles;
+    SELECT COUNT(*) INTO v_profiles_count FROM profiles;
+    
+    RAISE NOTICE '===========================================';
+    RAISE NOTICE 'Database Cleanup Complete';
+    RAISE NOTICE '===========================================';
+    RAISE NOTICE 'User Answers: % rows', v_user_answers_count;
+    RAISE NOTICE 'User Profiles: % rows', v_user_profiles_count;
+    RAISE NOTICE 'Profiles: % rows', v_profiles_count;
+    RAISE NOTICE '===========================================';
+    RAISE NOTICE 'Questions remain: 40 (35 choice + 5 text)';
+    RAISE NOTICE 'Database is ready for fresh user enrollment';
+    RAISE NOTICE '===========================================';
+END $$;
+
+-- ==========================================
+-- Quick Reference: How to Run This Script
+-- ==========================================
+-- From Supabase Dashboard:
+-- 1. Go to SQL Editor
+-- 2. Paste this entire script
+-- 3. Click "Run"
+--
+-- From CLI:
+-- supabase db reset --db-url "your-connection-string"
+-- ==========================================
