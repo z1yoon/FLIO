@@ -9,11 +9,6 @@
 -- 3. Total: 40 questions (35 choice + 5 text)
 -- ==========================================
 
--- Clear existing data for fresh start
-DELETE FROM user_answers WHERE question_id IN (SELECT id FROM questions);
-DELETE FROM question_performance WHERE question_id IN (SELECT id FROM questions);
-DELETE FROM questions;
-
 -- ==========================================
 -- Questions Table
 -- ==========================================
@@ -183,7 +178,8 @@ INSERT INTO questions (id, category, text_ko, text_en, answer_type, options, bas
 ('information_processing', 'MBTI성향', '새 사람 만날 때?', 'Meeting new people?', 'choice', '[{"value": "personality", "text_ko": "성격", "text_en": "Personality", "match_weight": 1.0}]'::jsonb, 0.65, 6.7, false, ARRAY['정보'], NULL, NULL),
 ('stress_management', '성격', '스트레스 받으면?', 'When stressed?', 'choice', '[{"value": "talk", "text_ko": "대화", "text_en": "Talk", "match_weight": 1.0}]'::jsonb, 0.70, 7.0, false, ARRAY['스트레스'], NULL, NULL),
 ('emotional_expression', '성격', '감정 표현?', 'Emotional expression?', 'choice', '[{"value": "honest", "text_ko": "솔직히", "text_en": "Honestly", "match_weight": 1.0}]'::jsonb, 0.70, 6.9, false, ARRAY['감정'], NULL, NULL),
-('life_values', '가치관', '인생에서 가장 중요한?', 'Most important in life?', 'choice', '[{"value": "family", "text_ko": "가족", "text_en": "Family", "match_weight": 1.0}]'::jsonb, 0.80, 8.0, false, ARRAY['가치관'], NULL, NULL),
+('life_values', '가치관', '인생에서 가장 중요한?', 'Most important in life?', 'choice', '[{"value": "family", "text_ko": "가족", "text_en": "Family", "match_weight": 1.0}, {"value": "happiness", "text_ko": "행복", "text_en": "Happiness", "match_weight": 0.95}, {"value": "stability", "text_ko": "안정", "text_en": "Stability", "match_weight": 0.85}, {"value": "success", "text_ko": "성공", "text_en": "Success", "match_weight": 0.8}, {"value": "freedom", "text_ko": "자유", "text_en": "Freedom", "match_weight": 0.75}]'::jsonb, 0.80, 8.0, false, ARRAY['가치관'], NULL, NULL),
+('religion_spirituality', '가치관', '종교나 영적 가치관은?', 'Religion or spirituality?', 'choice', '[{"value": "very_important", "text_ko": "매우 중요", "text_en": "Very important", "match_weight": 1.0}, {"value": "somewhat_important", "text_ko": "어느 정도 중요", "text_en": "Somewhat important", "match_weight": 0.7}, {"value": "not_important", "text_ko": "중요하지 않음", "text_en": "Not important", "match_weight": 0.3}, {"value": "respect_all", "text_ko": "모든 종교 존중", "text_en": "Respect all", "match_weight": 0.8}]'::jsonb, 0.75, 7.5, false, ARRAY['종교', '가치관'], NULL, NULL),
 
 -- ========== TEXT QUESTIONS (Q36-40) ==========
 
