@@ -90,17 +90,15 @@ $$ LANGUAGE plpgsql;
 -- Drop if exists to avoid conflicts
 DROP FUNCTION IF EXISTS get_user_profile_summary(UUID);
 
-CREATE FUNCTION get_user_profile_summary(
-    p_user_id UUID
-)
+CREATE OR REPLACE FUNCTION get_user_profile_summary(p_user_id UUID)
 RETURNS TABLE (
     user_id UUID,
-    nickname VARCHAR(50),
+    nickname VARCHAR,
     age INTEGER,
-    gender VARCHAR(10),
-    total_answers INTEGER,
-    has_embedding BOOLEAN,
-    last_updated TIMESTAMPTZ
+    gender VARCHAR,
+    bio TEXT,
+    photos TEXT[],
+    has_embedding BOOLEAN
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -109,17 +107,10 @@ BEGIN
         p.nickname,
         DATE_PART('year', AGE(p.birth_date))::INTEGER as age,
         p.gender,
-        COALESCE(answer_counts.total_answers, 0) as total_answers,
-        (p.profile_embedding_v2 IS NOT NULL) as has_embedding,
-        p.updated_at as last_updated
+        p.bio,
+        p.photos,
+        (p.profile_embedding_v2 IS NOT NULL) as has_embedding
     FROM public.profiles p
-    LEFT JOIN (
-        SELECT 
-            ua.user_id,
-            COUNT(*) as total_answers
-        FROM public.user_answers ua
-        GROUP BY ua.user_id
-    ) answer_counts ON p.user_id = answer_counts.user_id
     WHERE p.user_id = p_user_id;
 END;
 $$ LANGUAGE plpgsql;
