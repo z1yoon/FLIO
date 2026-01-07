@@ -915,9 +915,9 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -x c -c /dev/null
 
-ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
-
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/libtool -V
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -x assembler-with-cpp -c /dev/null
 
@@ -929,8 +929,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: fc4c85a3aa9154eff1b9ab9d66ffa689
-Build description path: /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/XCBuildData/fc4c85a3aa9154eff1b9ab9d66ffa689.xcbuilddata
+Build description signature: 3cfe75ee3b3ab5b29739fb70725ce45c
+Build description path: /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/XCBuildData/3cfe75ee3b3ab5b29739fb70725ce45c.xcbuilddata
 ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk /Users/amber/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.2-23C53-7d00a8b37fbd7999ea79df8ebc024bf0.sdkstatcache
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -o /Users/amber/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.2-23C53-7d00a8b37fbd7999ea79df8ebc024bf0.sdkstatcache
@@ -3102,8 +3102,8 @@ ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnu
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
     builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/SDWebImage/ResourceBundle-SDWebImage-SDWebImage-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/SDWebImage/SDWebImage.bundle/Info.plist
 
-note: Run script build phase '[Expo] Configure project' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'FLIO' from project 'FLIO')
 note: Run script build phase 'Bundle React Native code and images' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'FLIO' from project 'FLIO')
+note: Run script build phase '[Expo] Configure project' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'FLIO' from project 'FLIO')
 PhaseScriptExecution [Expo]\ Configure\ project /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Script-8CE8A7A07D7A108131046DB7.sh (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     export ACTION\=build
@@ -3708,14 +3708,15 @@ SwiftGeneratePch normal arm64 Compiling\ bridging\ header (in target 'FLIO' from
 
 SwiftDriverJobDiscovery normal arm64 Compiling bridging header (in target 'FLIO' from project 'FLIO')
 
-SwiftEmitModule normal arm64 Emitting\ module\ for\ FLIO (in target 'FLIO' from project 'FLIO')
+SwiftCompile normal arm64 Compiling\ ExpoModulesProvider.swift /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/Pods-FLIO/ExpoModulesProvider.swift (in target 'FLIO' from project 'FLIO')
 
-EmitSwiftModule normal arm64 (in target 'FLIO' from project 'FLIO')
+SwiftCompile normal arm64 /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/Pods-FLIO/ExpoModulesProvider.swift (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     
 
-SwiftCompile normal arm64 Compiling\ ExpoModulesProvider.swift /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/Pods-FLIO/ExpoModulesProvider.swift (in target 'FLIO' from project 'FLIO')
-SwiftCompile normal arm64 /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/Pods-FLIO/ExpoModulesProvider.swift (in target 'FLIO' from project 'FLIO')
+SwiftEmitModule normal arm64 Emitting\ module\ for\ FLIO (in target 'FLIO' from project 'FLIO')
+
+EmitSwiftModule normal arm64 (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     
 
@@ -4363,8 +4364,8 @@ total size is 11160  speedup is 4.54
 ExtractAppIntentsMetadata (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name FLIO --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk --xcode-version 17C52 --platform-family iOS --deployment-target 15.1 --bundle-identifier app.flio.mobile --output /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app --target-triple arm64-apple-ios15.1-simulator --binary-file /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app/FLIO --dependency-file /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Objects-normal/arm64/FLIO_dependency_info.dat --stringsdata-file /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Objects-normal/arm64/FLIO.SwiftFileList --metadata-file-list /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/FLIO.DependencyMetadataFileList --static-metadata-file-list /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/FLIO.DependencyStaticMetadataFileList --swift-const-vals-list /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Objects-normal/arm64/FLIO.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
-2026-01-07 20:40:31.891 appintentsmetadataprocessor[12443:129234026] Starting appintentsmetadataprocessor export
-2026-01-07 20:40:31.904 appintentsmetadataprocessor[12443:129234026] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+2026-01-07 22:49:57.654 appintentsmetadataprocessor[83388:130295342] Starting appintentsmetadataprocessor export
+2026-01-07 22:49:57.674 appintentsmetadataprocessor[83388:130295342] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
 
 ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/FLIO/Info.plist (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios

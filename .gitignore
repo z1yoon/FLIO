@@ -1,2 +1,9 @@
 services/ai-backend/.env
 apps/mobile/.env
+*.log
+*.map
+.DS_Store
+__pycache__/
+*.pyc
+.expo/xcodebuild.log
+.expo/xcodebuild-error.log
