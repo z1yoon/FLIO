@@ -49,7 +49,7 @@ export interface UserProfile {
 }
 
 class SupabaseQuestionService {
-  private readonly TOTAL_QUESTIONS = 45;
+  private readonly TOTAL_QUESTIONS = 40;
   private readonly MIN_QUESTIONS_FOR_MATCHING = 10;
 
   /**
