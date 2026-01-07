@@ -33,7 +33,7 @@ openai-whisper==20231117  # For audio preprocessing
 # TTS - CosyVoice2 (2025 best benchmark)
 # Ultra-low latency 150ms, Korean/Chinese/English/Japanese
 # Fine-grained emotion control, Apache 2.0 license
-cosyvoice>=0.1.0
+cosyvoice==0.0.8
 melo-tts==0.1.2  # Fallback
 edge-tts==6.1.12  # Last resort fallback
 
