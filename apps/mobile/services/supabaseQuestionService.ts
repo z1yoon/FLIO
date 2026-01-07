@@ -137,7 +137,7 @@ class SupabaseQuestionService {
       const answeredIds = answeredQuestions?.map(a => a.question_id) || [];
       console.log(`📊 User has answered ${answeredIds.length} questions`);
 
-      // Get unanswered questions
+      // If user has answered questions, filter them out
       let query = supabase
         .from('questions')
         .select(`
@@ -153,8 +153,12 @@ class SupabaseQuestionService {
           placeholder,
           max_length
         `)
-        .eq('is_active', true)
-        .not('id', 'in', `(${answeredIds.map(id => `'${id}'`).join(',')})`);
+        .eq('is_active', true);
+
+      // Only apply NOT IN filter if there are answered questions
+      if (answeredIds.length > 0) {
+        query = query.not('id', 'in', `(${answeredIds.map(id => `"${id}"`).join(',')})`);
+      }
 
       if (limit) {
         query = query.limit(limit);
