@@ -194,7 +194,6 @@ LEFT JOIN (
     SELECT 
         ua.user_id,
         COUNT(*) as total_answers
-    FROM public.user_answers ua
     GROUP BY ua.user_id
 ) answer_counts ON p.user_id = answer_counts.user_id
 WHERE p.is_active = TRUE;
@@ -223,9 +222,7 @@ COMMENT ON FUNCTION store_profile_embedding IS
 -- ==========================================
 
 -- Function: Get User Answers with Metadata
-DROP FUNCTION IF EXISTS get_user_answers_with_metadata(UUID);
 
-CREATE OR REPLACE FUNCTION get_user_answers_with_metadata(p_user_id UUID)
 RETURNS TABLE (
     question_id VARCHAR(100),
     answer_value VARCHAR(100),
@@ -249,7 +246,6 @@ BEGIN
         q.category,
         q.base_weight,
         q.effectiveness_score
-    FROM user_answers ua
     JOIN questions q ON ua.question_id = q.id
     WHERE ua.user_id = p_user_id
     ORDER BY q.effectiveness_score DESC;
@@ -284,8 +280,6 @@ BEGIN
                 WHEN ua.answer_value = ub.answer_value THEN 1.0
                 ELSE 0.0
             END as match_score
-        FROM user_answers ua
-        JOIN user_answers ub ON ua.question_id = ub.question_id
         JOIN questions q ON ua.question_id = q.id
         WHERE ua.user_id = p_user_a_id
           AND ub.user_id = p_user_b_id
