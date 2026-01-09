@@ -177,17 +177,17 @@ class AzureOpenAIService:
         user_b_name = user_b_profile.get('nickname', '회원 B')
         
         user_prompt = f"""
-        💒 매칭 상담 요청
+        매칭 상담 요청
         
         호환성 점수: {compatibility_score:.1%}
         
-        ⚠️ 절대 규칙: "{user_a_name}님", "{user_b_name}님" 실제 이름만 사용! "회원", "사용자" 등 일반 명칭 절대 금지!
+        절대 규칙: "{user_a_name}님", "{user_b_name}님" 실제 이름만 사용! "회원", "사용자" 등 일반 명칭 절대 금지!
         
-        📋 {user_a_name}님 ({user_a_profile.get('age', '?')}세):
+        {user_a_name}님 ({user_a_profile.get('age', '?')}세):
         {self._summarize_profile(user_a_profile)}
         주요 답변: {self._format_key_answers(user_a_answers) if user_a_answers else '답변 정보 없음'}
         
-        📋 {user_b_name}님 ({user_b_profile.get('age', '?')}세):
+        {user_b_name}님 ({user_b_profile.get('age', '?')}세):
         {self._summarize_profile(user_b_profile)}
         주요 답변: {self._format_key_answers(user_b_answers) if user_b_answers else '답변 정보 없음'}
         
@@ -208,12 +208,12 @@ class AzureOpenAIService:
             "match_percentage": {compatibility_score}
         }}}}
         
-        💡 매니저 말투 체크리스트:
-        ✓ "제가 ~을 봤을 때", "~하시더라고요", "~것 같아요", "~하시는 것 같아요"
-        ✓ "제 경험상~", "이런 커플들이~", "두 분이 정말~"
-        ✓ 구체적인 답변 내용을 직접 인용 ('[답변]'이라고 하셨는데요)
-        ✓ 긍정적이고 희망적인 톤 유지
-        ✓ 실제 이름 사용 필수!
+        매니저 말투 체크리스트:
+        - "제가 ~을 봤을 때", "~하시더라고요", "~것 같아요", "~하시는 것 같아요"
+        - "제 경험상~", "이런 커플들이~", "두 분이 정말~"
+        - 구체적인 답변 내용을 직접 인용 ('[답변]'이라고 하셨는데요)
+        - 긍정적이고 희망적인 톤 유지
+        - 실제 이름 사용 필수!
         """
         
         try:

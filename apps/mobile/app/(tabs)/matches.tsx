@@ -345,7 +345,7 @@ export default function MatchesScreen() {
             {isLoadingExplanation ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#4FD1C7" />
-                <Text style={styles.loadingTitle}>💒 AI 매칭 매니저가 분석 중이에요</Text>
+                <Text style={styles.loadingTitle}>AI 매칭 매니저가 분석 중이에요</Text>
                 <Text style={styles.loadingSubtitle}>
                   {selectedMatch.name || '회원'}님과의 인연을{'\n'}정성껏 분석하고 있습니다
                 </Text>
@@ -378,7 +378,7 @@ export default function MatchesScreen() {
               {/* AI Deep Analysis - Marriage Manager Style */}
               {explanation.ai_analysis?.summary && (
                 <View style={styles.reasonsSection}>
-                  <Text style={styles.aiSectionTitle}>💝 매니저의 매칭 분석</Text>
+                  <Text style={styles.aiSectionTitle}>매니저의 매칭 분석</Text>
                   <View style={styles.aiAnalysisFlow}>
                     <Text style={styles.aiFlowText}>{explanation.ai_analysis.summary}</Text>
                     
@@ -398,7 +398,7 @@ export default function MatchesScreen() {
               {/* Category Graphs - Visual Stats */}
               {explanation.compatibility_graphs && Object.keys(explanation.compatibility_graphs).length > 0 && (
                 <View style={styles.reasonsSection}>
-                  <Text style={styles.sectionTitle}>📊 영역별 호환성</Text>
+                  <Text style={styles.sectionTitle}>영역별 호환성</Text>
                   
                   {/* Total Questions Summary */}
                   <View style={styles.totalQuestionsCard}>
@@ -431,7 +431,7 @@ export default function MatchesScreen() {
 
               {explanation.conversation_starters.length > 0 && (
                 <View style={styles.startersSection}>
-                  <Text style={styles.sectionTitle}>💬 대화 시작 주제</Text>
+                  <Text style={styles.sectionTitle}>대화 시작 주제</Text>
                   {explanation.conversation_starters.map((starter, index) => (
                     <TouchableOpacity key={index} style={styles.starterItem}>
                       <Text style={styles.starterText}>"{starter}"</Text>
@@ -732,6 +732,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 12,
   },
+  aiSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 16,
+  },
   reasonItem: {
     marginBottom: 8,
   },
@@ -916,7 +922,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   aiAnalysisFlow: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 16,
     padding: 20,
     borderLeftWidth: 4,
@@ -924,7 +930,7 @@ const styles = StyleSheet.create({
   },
   aiFlowText: {
     fontSize: 15,
-    color: '#FFFFFF',
+    color: '#2C3E50',
     lineHeight: 26,
     fontWeight: '400',
   },
