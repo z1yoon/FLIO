@@ -35,7 +35,6 @@ class MatchResult(BaseModel):
     cultural_bonus: float
     name: Optional[str] = None
     age: Optional[int] = None
-    explanation: Optional[Dict] = None
 
 class ProfileEmbeddingService:
     """
@@ -1188,15 +1187,9 @@ class ProfileEmbeddingService:
             # The preference will be used in match explanations
             # Future: Use AI to analyze preference and adjust weights/filters
             
-            # Store preference in match results for explanation generation
+            # Find matches - preference will be used when generating explanations later
+            # The preference context is stored in the database and retrieved when needed
             match_results = await self.find_compatible_matches(user_id, limit)
-            
-            # Attach preference context to each match for explanation
-            for match in match_results:
-                if not match.explanation:
-                    match.explanation = {}
-                match.explanation['user_preference'] = preference
-                match.explanation['reshuffle_context'] = reshuffle_context
             
             return match_results
             
