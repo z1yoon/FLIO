@@ -209,13 +209,13 @@ POST /api/v1/questions/answer
 POST /api/v1/matching/profile/create-embedding?user_id={id}
 
 # Find matches using hybrid algorithm
-GET /api/v1/matching/matches/{user_id}?limit=10&min_compatibility=0.3
+GET /api/v1/matching/matches/{user_id}?limit=10
 
 # Response includes:
-# - choice_score: Choice question compatibility (0-1)
-# - similarity: Embedding similarity (0-1)
-# - combined_score: Hybrid total (0-1)
-# - has_dealbreaker_conflict: Boolean
+# - compatibility_score: Total hybrid score (0-1)
+# - name: Match name
+# - age: Match age
+# - user_id: Match user ID
 
 # Get match explanation with AI
 GET /api/v1/matching/match-explanation/{user_a_id}/{user_b_id}
