@@ -375,23 +375,27 @@ export default function MatchesScreen() {
                 <Text style={styles.compatibilityLabel}>호환성</Text>
               </View>
 
-              {/* AI Deep Analysis - Marriage Manager Style */}
+              {/* AI Deep Analysis - First, matching category style */}
               {explanation.ai_analysis?.summary && (
                 <View style={styles.reasonsSection}>
-                  <Text style={styles.aiSectionTitle}>매니저의 매칭 분석</Text>
-                  <View style={styles.aiAnalysisFlow}>
-                    <Text style={styles.aiFlowText}>{explanation.ai_analysis.summary}</Text>
-                    
-                    {explanation.ai_analysis.compatibility_reasons?.length > 0 && (
-                      <>
-                        {explanation.ai_analysis.compatibility_reasons.map((reason: string, index: number) => (
-                          <Text key={index} style={styles.aiFlowText}>
-                            {'\n\n'}{reason}
-                          </Text>
-                        ))}
-                      </>
-                    )}
+                  <Text style={styles.sectionTitle}>매니저의 매칭 분석</Text>
+                  
+                  {/* Summary Card */}
+                  <View style={styles.aiSummaryCard}>
+                    <Text style={styles.aiSummaryText}>{explanation.ai_analysis.summary}</Text>
                   </View>
+                  
+                  {/* Compatibility Reasons */}
+                  {explanation.ai_analysis.compatibility_reasons?.length > 0 && (
+                    <View style={styles.aiReasonsContainer}>
+                      {explanation.ai_analysis.compatibility_reasons.map((reason: string, index: number) => (
+                        <View key={index} style={styles.aiReasonCard}>
+                          <Text style={styles.aiReasonNumber}>{index + 1}</Text>
+                          <Text style={styles.aiReasonText}>{reason}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
               )}
               
@@ -738,6 +742,42 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 12,
     textAlign: 'left',
+  },
+  aiSummaryCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+  },
+  aiSummaryText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    lineHeight: 26,
+    fontWeight: '400',
+  },
+  aiReasonsContainer: {
+    gap: 12,
+  },
+  aiReasonCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  aiReasonNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4FD1C7',
+    marginRight: 12,
+    minWidth: 24,
+  },
+  aiReasonText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#FFFFFF',
+    lineHeight: 24,
+    fontWeight: '400',
   },
   reasonItem: {
     marginBottom: 8,

@@ -304,11 +304,11 @@ class ProfileEmbeddingService:
                 },
                 "detailed_scores": compatibility,
                 "score_breakdown": {
-                    "static_questions": f"{compatibility.get('static_score', 0):.1%} (70% weight)",
+                    "static_questions": f"{compatibility.get('static_score', 0):.1%} (60% weight)",
                     "importance_bonus": f"{compatibility.get('importance_bonus', 0):.1%} (20% weight)",
-                    "azure_embedding": f"{compatibility.get('embedding_score', 0):.1%} (10% weight)",
+                    "azure_embedding": f"{compatibility.get('embedding_score', 0):.1%} (20% weight)",
                     "total": f"{compatibility['total_score']:.1%}"
-                }
+                },
             }
             
         except Exception as e:
@@ -433,15 +433,15 @@ class ProfileEmbeddingService:
             if not embedding_a or not embedding_b:
                 return {'total_score': 0.0, 'embedding_score': 0.0, 'static_score': 0.0, 'importance_bonus': 0.0}
             
-            # 2. Calculate static question matching score (70% weight) - PRIORITIZED
-            static_score = await self._calculate_static_question_score(user_a_id, user_b_id) * 0.7
+            # 2. Calculate static question matching score (60% weight) - PRIORITIZED
+            static_score = await self._calculate_static_question_score(user_a_id, user_b_id) * 0.6
             
             # 3. Calculate importance bonus (20% weight) - Dealbreakers matter
             importance_bonus = await self._calculate_importance_bonus(user_a_id, user_b_id) * 0.2
             
-            # 4. Calculate Azure embedding similarity (10% weight) - Supplementary
+            # 4. Calculate Azure embedding similarity (20% weight) - Semantic understanding
             embedding_similarity = cosine_similarity([embedding_a], [embedding_b])[0][0]
-            embedding_score = float(embedding_similarity) * 0.1
+            embedding_score = float(embedding_similarity) * 0.2
             
             # 5. Combine all scores (Hybrid Algorithm)
             total_score = static_score + importance_bonus + embedding_score
@@ -681,14 +681,8 @@ class ProfileEmbeddingService:
                                            user_a_info: Dict, user_b_info: Dict) -> Dict:
         """Generate statistical analysis for static questions with graphs and insights"""
         try:
-            # Categorize questions for analysis
-            categories = {
-                '결혼계획': [],  # Marriage plans
-                '가치관': [],    # Values  
-                '생활방식': [],  # Lifestyle
-                '갈등해결': [],  # Conflict resolution
-                '감정지원': [],  # Emotional support
-            }
+            # Use dynamic categories from actual database
+            categories = {}
             
             # Group matching/mismatching questions by category
             for qid in user_a_answers.keys():
@@ -708,13 +702,10 @@ class ProfileEmbeddingService:
                         'user_b_answer': value_b
                     }
                     
-                    if category in categories:
-                        categories[category].append(question_analysis)
-                    else:
-                        # Default category for unmapped questions
-                        if '기타' not in categories:
-                            categories['기타'] = []
-                        categories['기타'].append(question_analysis)
+                    # Create category if it doesn't exist
+                    if category not in categories:
+                        categories[category] = []
+                    categories[category].append(question_analysis)
             
             # Calculate category compatibility percentages
             category_stats = {}
