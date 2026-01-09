@@ -354,10 +354,6 @@ export default function MatchesScreen() {
               bounces={true}
               contentContainerStyle={styles.scrollContent}
             >
-              <Text style={styles.explanationTitle}>
-                💒 매칭 매니저 분석
-              </Text>
-              
               <View style={styles.compatibilityHeader}>
                 <Text style={styles.compatibilityPercentage}>
                   {Math.round(explanation.compatibility_score * 100)}%
@@ -1052,36 +1048,32 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     lineHeight: 22,
   },
-  // Category graph styles
-  categoryGraphItem: {
-    marginBottom: 16,
-  },
-  categoryHeader: {
+  // Category match styles
+  categoryMatchItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
     marginBottom: 8,
   },
-  categoryName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.9)',
+  categoryMatchContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
   },
-  categoryPercentage: {
+  categoryMatchName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  categoryMatchDetail: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4FD1C7',
-  },
-  progressBarContainer: {
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#4FD1C7',
-    borderRadius: 4,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   categoryDetail: {
     fontSize: 12,
