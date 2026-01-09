@@ -892,7 +892,9 @@ class ProfileEmbeddingService:
                 user_b_profile=user_b_info,
                 compatibility_score=compatibility_score,
                 user_a_answers=formatted_text_answers_a,
-                user_b_answers=formatted_text_answers_b
+                user_b_answers=formatted_text_answers_b,
+                reshuffle_preference=reshuffle_preference,
+                reshuffle_context=reshuffle_context
             )
             
             logger.info(f"Generated AI explanation for {len(common_text_questions)} text questions")
