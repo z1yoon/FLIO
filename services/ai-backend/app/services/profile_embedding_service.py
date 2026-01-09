@@ -237,7 +237,7 @@ class ProfileEmbeddingService:
                     name=profile.get('name'),
                     age=profile.get('age')
                 )
-                logger.info(f"Match result: name={match_result.name}, age={match_result.age}, static_match={raw_static_score*100:.1f}%")
+                logger.info(f"Match result: name={match_result.name}, age={match_result.age}, exact_match={exact_match_rate*100:.1f}%")
                 match_results.append(match_result)
             
             # 5. Sort by compatibility and return top matches
