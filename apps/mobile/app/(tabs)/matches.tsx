@@ -297,16 +297,6 @@ export default function MatchesScreen() {
                   {match.age && (
                     <Text style={styles.profileAge}>{match.age}세</Text>
                   )}
-                  
-                  {/* AI Compatibility Breakdown */}
-                  <View style={styles.compatibilityBreakdown}>
-                    <View style={styles.compatibilityItem}>
-                      <Text style={styles.compatibilityLabel}>전체 호환성</Text>
-                      <Text style={styles.compatibilityValue}>
-                        {Math.round(match.compatibility_score * 100)}%
-                      </Text>
-                    </View>
-                  </View>
                 </View>
 
                 {/* Action Buttons */}
