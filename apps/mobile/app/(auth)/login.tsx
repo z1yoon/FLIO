@@ -71,57 +71,20 @@ export default function LoginScreen() {
           
           console.log(`📊 User profile status: ${userProfile?.total_answers || 0} answers, can match: ${canStartMatching}`);
           
-          if (!hasAnsweredQuestions) {
-            // No questions answered - redirect to questions
-            console.log('🔄 Redirecting to questions - no answers found');
-            FLIOAlertAPI.alert(
-              '프로필 완성하기', 
-              '매칭을 시작하기 위해 질문에 답변해주세요.',
-              [
-                { 
-                  text: '질문 답변하기', 
-                  onPress: () => router.replace('/(onboarding)/questions')
-                }
-              ]
-            );
-            return;
-          } else if (!canStartMatching) {
-            // Some questions answered but not enough for matching
-            console.log('🔄 Redirecting to questions - insufficient answers for matching');
-            FLIOAlertAPI.alert(
-              '프로필 완성하기', 
-              `더 나은 매칭을 위해 몇 가지 질문에 더 답변해주세요. (현재: ${userProfile?.total_answers || 0}개 답변)`,
-              [
-                { 
-                  text: '계속 답변하기', 
-                  onPress: () => router.replace('/(onboarding)/questions')
-                },
-                { 
-                  text: '나중에', 
-                  style: 'cancel',
-                  onPress: () => router.replace('/(tabs)/matches')
-                }
-              ]
-            );
-            return;
-          } else {
+          if (canStartMatching) {
             // Profile complete - go to matches
             console.log('✅ Profile complete - redirecting to matches');
             router.replace('/(tabs)/matches');
+          } else {
+            // Profile incomplete - redirect to questions (with or without answers)
+            console.log('🔄 Redirecting to questions - profile incomplete');
+            router.replace('/(onboarding)/questions');
           }
         } catch (profileError) {
           console.error('❌ Failed to check profile status:', profileError);
-          // If profile check fails, allow user to proceed but show warning
-          FLIOAlertAPI.alert(
-            '프로필 상태 확인 실패',
-            '프로필 상태를 확인할 수 없습니다. 매칭 화면으로 이동합니다.',
-            [
-              {
-                text: '확인',
-                onPress: () => router.replace('/(tabs)/matches')
-              }
-            ]
-          );
+          // If profile check fails, redirect to questions to be safe
+          console.log('⚠️ Profile check failed - redirecting to questions');
+          router.replace('/(onboarding)/questions');
         }
       }
     } catch (error: any) {

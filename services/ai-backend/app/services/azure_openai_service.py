@@ -143,7 +143,9 @@ class AzureOpenAIService:
                                        user_b_profile: Dict, 
                                        compatibility_score: float,
                                        user_a_answers: Dict = None,
-                                       user_b_answers: Dict = None) -> MatchExplanation:
+                                       user_b_answers: Dict = None,
+                                       reshuffle_preference: str = None,
+                                       reshuffle_context: List[Dict] = None) -> MatchExplanation:
         """
         Generate human-readable explanation for why two profiles match
         Focus on Korean cultural values and relationship compatibility
@@ -195,6 +197,12 @@ class AzureOpenAIService:
         {self._summarize_profile(user_b_profile)}
         주요 답변: {self._format_key_answers(user_b_answers) if user_b_answers else '답변 정보 없음'}
         
+        {"" if not reshuffle_preference else f'''
+        ⚠️ 중요: {user_a_name}님의 새로운 매칭 요청
+        {user_a_name}님께서 "{reshuffle_preference}"라고 하시며 새로운 매칭을 원하셨습니다.
+        이 요청을 반드시 반영하여, {user_b_name}님이 이 선호도에 어떻게 부합하는지 설명해주세요.
+        '''}
+        
         심리 전문가이자 매니저로서 두 사람을 깊이 분석하여 다음 JSON 형식으로 작성하세요:
         
         핵심 요구사항:
@@ -203,6 +211,7 @@ class AzureOpenAIService:
         3. 자연스럽고 다양한 표현을 사용하세요 (매번 같은 시작 문구 피하기)
         4. 따뜻하면서도 전문적인 톤을 유지하세요
         5. 구체적이고 실용적인 조언을 제공하세요
+        {"6. **중요**: 사용자의 새로운 매칭 요청을 반드시 설명에 반영하세요" if reshuffle_preference else ""}
         
         JSON 형식:
         {{{{

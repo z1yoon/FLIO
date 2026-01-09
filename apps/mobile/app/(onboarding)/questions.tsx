@@ -116,18 +116,36 @@ export default function QuestionsScreen() {
       const unansweredQuestions = await supabaseQuestionService.getUnansweredQuestions(currentUserId);
       
       if (unansweredQuestions.length === 0) {
-        // All questions completed - go to complete screen
-        console.log('✅ All questions already completed!');
-        router.replace({
-          pathname: '/(onboarding)/complete',
-          params: { 
-            userId: currentUserId,
-            name: userName,
-            age: userAge,
-            gender: userGender,
-            hasAIProfile: 'true'
-          }
-        });
+        // No more unanswered questions - check if user can start matching
+        const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
+        
+        if (canStartMatching) {
+          // Profile complete - go to complete screen
+          console.log('✅ All questions completed and can start matching!');
+          router.replace({
+            pathname: '/(onboarding)/complete',
+            params: { 
+              userId: currentUserId,
+              name: userName,
+              age: userAge,
+              gender: userGender,
+              hasAIProfile: 'true'
+            }
+          });
+        } else {
+          // Answered all available questions but not enough for matching
+          console.log('⚠️ No unanswered questions but insufficient answers for matching');
+          FLIOAlertAPI.alert(
+            '프로필 완성 중',
+            `현재 ${answeredCount}개의 질문에 답변하셨습니다. 더 많은 질문이 곧 추가될 예정입니다. 지금은 매칭 화면으로 이동합니다.`,
+            [
+              {
+                text: '확인',
+                onPress: () => router.replace('/(tabs)/matches')
+              }
+            ]
+          );
+        }
         return;
       }
       
@@ -312,8 +330,9 @@ export default function QuestionsScreen() {
       // Go back to previous question
       setCurrentQuestionIndex(prev => prev - 1);
     } else {
-      // Go back to previous screen
-      router.back();
+      // Can't go back from first question - user is in onboarding flow
+      // Just stay on the first question
+      console.log('⚠️ Already at first question');
     }
   };
 

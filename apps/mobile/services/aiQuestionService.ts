@@ -75,8 +75,24 @@ export interface MatchResult {
 export interface MatchExplanation {
   compatibility_score: number;
   summary: string;
-  compatibility_reasons: string[];
+  statistical_insights: string[];
+  compatibility_graphs: { [key: string]: { match_percentage: number; total_questions: number; matching_questions: number; high_importance_matches: number } };
+  personalized_insights: {
+    user_a_personality: { name: string; key_traits: string[]; description: string };
+    user_b_personality: { name: string; key_traits: string[]; description: string };
+    why_you_match: string[];
+    complementary_strengths: string[];
+    match_summary: string;
+  };
+  ai_analysis?: {
+    summary: string;
+    compatibility_reasons: string[];
+    conversation_starters: string[];
+    match_percentage: number;
+  };
   conversation_starters: string[];
+  detailed_scores: { [key: string]: number };
+  score_breakdown: { [key: string]: string };
 }
 
 export interface AIQuestionResponse {
@@ -289,8 +305,19 @@ class AIQuestionService {
       explanation: {
         compatibility_score: data.compatibility_score,
         summary: data.summary,
-        compatibility_reasons: data.compatibility_reasons,
-        conversation_starters: data.conversation_starters
+        statistical_insights: data.statistical_insights || [],
+        compatibility_graphs: data.compatibility_graphs || {},
+        personalized_insights: data.personalized_insights || {
+          user_a_personality: { name: '', key_traits: [], description: '' },
+          user_b_personality: { name: '', key_traits: [], description: '' },
+          why_you_match: [],
+          complementary_strengths: [],
+          match_summary: ''
+        },
+        ai_analysis: data.ai_analysis,
+        conversation_starters: data.conversation_starters || [],
+        detailed_scores: data.detailed_scores || {},
+        score_breakdown: data.score_breakdown || {}
       }
     };
   }

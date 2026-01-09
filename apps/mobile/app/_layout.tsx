@@ -1,8 +1,11 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
+import { router } from 'expo-router';
 import { FLIOAlertProvider } from '../components/FLIOAlert';
+import { supabase } from '../services/supabase/client';
+import { supabaseQuestionService } from '../services/supabaseQuestionService';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -49,10 +52,85 @@ if (__DEV__) {
 }
 
 export default function RootLayout() {
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
+
   useEffect(() => {
-    // Hide splash screen after app is ready
-    SplashScreen.hideAsync();
+    checkAuthState();
+    
+    // Listen for auth state changes (login/logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('🔄 Auth state changed:', event);
+        
+        if (event === 'SIGNED_OUT' || !session) {
+          console.log('🚫 User signed out - redirecting to landing');
+          router.replace('/');
+        } else if (event === 'SIGNED_IN' && session) {
+          console.log('✅ User signed in - checking profile');
+          // Re-check profile completion when user signs in
+          try {
+            const userProfile = await supabaseQuestionService.getUserProfile(session.user.id);
+            const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
+            
+            if (canStartMatching) {
+              router.replace('/(tabs)/matches');
+            } else {
+              router.replace('/(onboarding)/questions');
+            }
+          } catch (error) {
+            console.error('❌ Profile check failed on sign in:', error);
+            router.replace('/(onboarding)/questions');
+          }
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Navigate after layout is mounted
+  useEffect(() => {
+    if (isAuthChecked && initialRoute) {
+      const timer = setTimeout(() => {
+        router.replace(initialRoute as any);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthChecked, initialRoute]);
+
+  const checkAuthState = async () => {
+    try {
+      console.log('🔍 Checking authentication state...');
+      
+      // Get current session
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('❌ Session check error:', error);
+        setInitialRoute('/');
+        setIsAuthChecked(true);
+        SplashScreen.hideAsync();
+        return;
+      }
+
+      // Always start at landing page - let user explicitly login
+      console.log(session ? '✅ Session exists - showing landing page' : '🚫 No session - showing landing page');
+      setInitialRoute('/');
+      setIsAuthChecked(true);
+      SplashScreen.hideAsync();
+    } catch (error) {
+      console.error('❌ Auth state check failed:', error);
+      setInitialRoute('/');
+      setIsAuthChecked(true);
+      SplashScreen.hideAsync();
+    }
+  };
+
+  // Don't render until auth check is complete
+  if (!isAuthChecked) {
+    return null;
+  }
 
   return (
     <FLIOAlertProvider>

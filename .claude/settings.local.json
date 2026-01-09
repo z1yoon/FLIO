@@ -30,8 +30,23 @@
       "mcp__ide__executeCode",
       "Bash(pkill:*)",
       "Bash(DOCKER_HOST=unix:///Users/amber/.colima/default/docker.sock docker ps)",
-      "Bash(nslookup:*)"
+      "Bash(nslookup:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:code.claude.com)",
+      "Bash(claude mcp add puppeteer:*)",
+      "Bash(claude mcp add:*)",
+      "Bash(claude mcp:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(chmod:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(sed:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }

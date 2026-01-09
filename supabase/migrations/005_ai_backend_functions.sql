@@ -4,9 +4,9 @@
 -- ==========================================
 -- Find Similar Profiles (1024D Embeddings)
 -- ==========================================
-DROP FUNCTION IF EXISTS find_similar_profiles_v2(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER);
+DROP FUNCTION IF EXISTS find_similar_profiles(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER);
 
-CREATE FUNCTION find_similar_profiles_v2(
+CREATE FUNCTION find_similar_profiles(
     query_embedding vector(1024),
     exclude_user_id UUID,
     match_limit INTEGER DEFAULT 20,
@@ -26,7 +26,7 @@ BEGIN
     RETURN QUERY
     SELECT 
         p.user_id,
-        (1 - (p.profile_embedding_v2 <=> query_embedding))::FLOAT AS similarity,
+        (1 - (p.profile_embedding <=> query_embedding))::FLOAT AS similarity,
         p.nickname,
         p.birth_date,
         p.gender,
@@ -34,11 +34,11 @@ BEGIN
     FROM public.profiles p
     WHERE p.user_id != exclude_user_id
         AND p.is_active = TRUE
-        AND p.profile_embedding_v2 IS NOT NULL
+        AND p.profile_embedding IS NOT NULL
         AND (gender_filter IS NULL OR p.gender = gender_filter)
         AND (min_age IS NULL OR DATE_PART('year', AGE(p.birth_date)) >= min_age)
         AND (max_age IS NULL OR DATE_PART('year', AGE(p.birth_date)) <= max_age)
-    ORDER BY p.profile_embedding_v2 <=> query_embedding
+    ORDER BY p.profile_embedding <=> query_embedding
     LIMIT match_limit;
 END;
 $$ LANGUAGE plpgsql;
@@ -57,7 +57,7 @@ RETURNS BOOLEAN AS $$
 BEGIN
     UPDATE public.profiles
     SET 
-        profile_embedding_v2 = p_embedding,
+        profile_embedding = p_embedding,
         updated_at = NOW()
     WHERE user_id = p_user_id;
     
@@ -89,7 +89,7 @@ BEGIN
         p.gender,
         p.bio,
         p.photos,
-        (p.profile_embedding_v2 IS NOT NULL) as has_embedding
+        (p.profile_embedding IS NOT NULL) as has_embedding
     FROM public.profiles p
     WHERE p.user_id = p_user_id;
 END;
@@ -98,11 +98,11 @@ $$ LANGUAGE plpgsql;
 -- ==========================================
 -- Grant Permissions
 -- ==========================================
-GRANT EXECUTE ON FUNCTION find_similar_profiles_v2(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION find_similar_profiles(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION store_profile_embedding(UUID, vector, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_user_profile_summary(UUID) TO authenticated;
 
-GRANT EXECUTE ON FUNCTION find_similar_profiles_v2(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER) TO service_role;
+GRANT EXECUTE ON FUNCTION find_similar_profiles(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER) TO service_role;
 GRANT EXECUTE ON FUNCTION store_profile_embedding(UUID, vector, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION get_user_profile_summary(UUID) TO service_role;
 
@@ -110,7 +110,7 @@ GRANT EXECUTE ON FUNCTION get_user_profile_summary(UUID) TO service_role;
 -- Indexes
 -- ==========================================
 CREATE INDEX IF NOT EXISTS idx_profiles_has_embedding 
-ON public.profiles(user_id) WHERE profile_embedding_v2 IS NOT NULL;
+ON public.profiles(user_id) WHERE profile_embedding IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_questions_active_effectiveness 
 ON public.questions(is_active, effectiveness_score DESC) WHERE is_active = TRUE;

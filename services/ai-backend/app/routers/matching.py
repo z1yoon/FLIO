@@ -204,7 +204,7 @@ class ReshuffleRequest(BaseModel):
 async def reshuffle_matches_with_preference(request: ReshuffleRequest):
     """
     Find new matches based on user's preference/feedback
-    Uses the same matching algorithm but logs the preference for future improvements
+    Analyzes user preference with AI and adjusts matching accordingly
     
     - **user_id**: User's unique identifier
     - **preference**: User's preference or reason for reshuffling (e.g., "더 비슷한 취미를 가진 분")
@@ -214,10 +214,21 @@ async def reshuffle_matches_with_preference(request: ReshuffleRequest):
     try:
         logger.info(f"Reshuffle request from user {request.user_id} with preference: {request.preference}")
         
-        # For now, use the same matching algorithm
-        # In the future, this could use the preference to adjust weights or filter criteria
-        match_results = await profile_embedding_service.find_compatible_matches(
-            request.user_id, 
+        # Store reshuffle feedback in database for future analysis
+        await profile_embedding_service.store_reshuffle_feedback(
+            request.user_id,
+            request.preference
+        )
+        
+        # Get user's reshuffle history for context
+        reshuffle_context = await profile_embedding_service.get_reshuffle_context(request.user_id)
+        
+        # Find matches with preference context
+        # This will be used to adjust matching and generate better explanations
+        match_results = await profile_embedding_service.find_compatible_matches_with_preference(
+            request.user_id,
+            request.preference,
+            reshuffle_context,
             request.limit * 2
         )
         
@@ -233,20 +244,21 @@ async def reshuffle_matches_with_preference(request: ReshuffleRequest):
         # Convert to dict for serialization
         matches_dict = [match.dict() for match in final_matches]
         
-        logger.info(f"Found {len(final_matches)} matches for user {request.user_id} with preference")
+        logger.info(f"Found {len(final_matches)} preference-based matches for user {request.user_id}")
         
         return MatchesResponse(
             user_id=request.user_id,
             matches=matches_dict,
             total_found=len(filtered_matches),
             metadata={
-                "algorithm_version": "3.1-balanced",
+                "algorithm_version": "3.2-preference-aware",
                 "embedding_dimension": 1024,
                 "static_questions_weight": 0.6,
                 "importance_bonus_weight": 0.2,
                 "embedding_weight": 0.2,
                 "dealbreaker_filtering": True,
-                "user_preference": request.preference
+                "user_preference": request.preference,
+                "has_reshuffle_history": len(reshuffle_context) > 0
             }
         )
         

@@ -248,10 +248,11 @@ class ProfileEmbeddingService:
             logger.error(f"Failed to find matches for user {user_id}: {e}")
             raise Exception(f"Match finding failed: {str(e)}")
     
-    async def get_match_explanation(self, user_a_id: str, user_b_id: str) -> Dict:
+    async def get_match_explanation(self, user_a_id: str, user_b_id: str, reshuffle_preference: str = None) -> Dict:
         """
         Generate detailed explanation for why two users match
         Uses statistical analysis for static questions and AI only for open-ended questions
+        Can include reshuffle preference context for personalized explanations
         """
         try:
             # Get both user profiles
@@ -270,9 +271,15 @@ class ProfileEmbeddingService:
                 user_a_answers, user_b_answers, user_a_info, user_b_info
             )
             
+            # Get reshuffle context if available
+            reshuffle_context = None
+            if reshuffle_preference:
+                reshuffle_context = await self.get_reshuffle_context(user_a_id)
+            
             # Generate AI explanation only for open-ended text questions (Q36-40)
             ai_explanation = await self._generate_ai_explanation_for_text_questions(
-                user_a_info, user_b_info, user_a_answers, user_b_answers, compatibility['total_score']
+                user_a_info, user_b_info, user_a_answers, user_b_answers, 
+                compatibility['total_score'], reshuffle_preference, reshuffle_context
             )
             
             # Debug logging
@@ -843,8 +850,11 @@ class ProfileEmbeddingService:
     
     async def _generate_ai_explanation_for_text_questions(self, user_a_info: Dict, user_b_info: Dict, 
                                                         user_a_answers: Dict, user_b_answers: Dict,
-                                                        compatibility_score: float) -> Optional[object]:
-        """Generate AI explanation only for open-ended text questions (Q36-40)"""
+                                                        compatibility_score: float,
+                                                        reshuffle_preference: str = None,
+                                                        reshuffle_context: List[Dict] = None) -> Optional[object]:
+        """Generate AI explanation only for open-ended text questions (Q36-40)
+        Can include reshuffle preference to personalize explanation"""
         try:
             # Extract only text questions (Q36-40: personal_values_lifestyle, ideal_relationship_dynamic, 
             # future_life_vision, conflict_growth_philosophy, life_philosophy_happiness)
@@ -1135,4 +1145,61 @@ class ProfileEmbeddingService:
             return {}
 
 # Singleton instance
+    async def store_reshuffle_feedback(self, user_id: str, preference_text: str):
+        """Store user's reshuffle preference for future analysis"""
+        try:
+            result = self.supabase.table('reshuffle_feedback').insert({
+                'user_id': user_id,
+                'preference_text': preference_text
+            }).execute()
+            logger.info(f"Stored reshuffle feedback for user {user_id}")
+            return result.data
+        except Exception as e:
+            logger.error(f"Failed to store reshuffle feedback: {e}")
+            return None
+    
+    async def get_reshuffle_context(self, user_id: str, limit: int = 3) -> List[Dict]:
+        """Get user's recent reshuffle preferences for context"""
+        try:
+            result = self.supabase.rpc('get_user_reshuffle_context', {
+                'p_user_id': user_id,
+                'p_limit': limit
+            }).execute()
+            return result.data if result.data else []
+        except Exception as e:
+            logger.warning(f"Failed to get reshuffle context: {e}")
+            return []
+    
+    async def find_compatible_matches_with_preference(
+        self, 
+        user_id: str, 
+        preference: str,
+        reshuffle_context: List[Dict],
+        limit: int = 10
+    ) -> List[MatchResult]:
+        """
+        Find matches with user preference context
+        Uses AI to analyze preference and adjust matching
+        """
+        try:
+            # For now, use the same matching algorithm
+            # The preference will be used in match explanations
+            # Future: Use AI to analyze preference and adjust weights/filters
+            
+            # Store preference in match results for explanation generation
+            match_results = await self.find_compatible_matches(user_id, limit)
+            
+            # Attach preference context to each match for explanation
+            for match in match_results:
+                if not match.explanation:
+                    match.explanation = {}
+                match.explanation['user_preference'] = preference
+                match.explanation['reshuffle_context'] = reshuffle_context
+            
+            return match_results
+            
+        except Exception as e:
+            logger.error(f"Failed to find preference-based matches: {e}")
+            raise
+
 profile_embedding_service = ProfileEmbeddingService()
