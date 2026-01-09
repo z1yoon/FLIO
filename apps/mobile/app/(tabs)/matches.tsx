@@ -405,18 +405,19 @@ export default function MatchesScreen() {
                     <Text style={styles.totalQuestionsSubtext}>질문 일치</Text>
                   </View>
                   
-                  {/* Category Bar Graphs */}
+                  {/* Category Match Status - Simple Icons */}
                   {Object.entries(explanation.compatibility_graphs).map(([category, stats]: [string, any]) => (
-                    <View key={category} style={styles.categoryGraphItem}>
-                      <View style={styles.categoryHeader}>
-                        <Text style={styles.categoryName}>{category}</Text>
-                        <Text style={styles.categoryPercentage}>{Math.round(stats.match_percentage)}%</Text>
+                    <View key={category} style={styles.categoryMatchItem}>
+                      <View style={styles.categoryMatchContent}>
+                        <Ionicons 
+                          name={stats.match_percentage === 100 ? "checkmark-circle" : stats.match_percentage === 0 ? "close-circle" : "remove-circle"} 
+                          size={24} 
+                          color={stats.match_percentage === 100 ? "#4FD1C7" : stats.match_percentage === 0 ? "#FF6B6B" : "#FFA500"} 
+                        />
+                        <Text style={styles.categoryMatchName}>{category}</Text>
                       </View>
-                      <View style={styles.progressBarContainer}>
-                        <View style={[styles.progressBar, { width: `${stats.match_percentage}%` }]} />
-                      </View>
-                      <Text style={styles.categoryDetail}>
-                        {stats.matching_questions}/{stats.total_questions} 일치
+                      <Text style={styles.categoryMatchDetail}>
+                        {stats.matching_questions}/{stats.total_questions}
                       </Text>
                     </View>
                   ))}
