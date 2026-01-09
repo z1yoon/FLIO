@@ -264,37 +264,83 @@ class SupabaseQuestionService {
     try {
       console.log(`📋 Loading user profile: ${userId}`);
 
-      // Use database function to get complete profile
-      const { data, error } = await supabase.rpc('get_user_profile_summary', {
-        p_user_id: userId
+      // Get user's answers with question details
+      const { data: answersData, error: answersError } = await supabase
+        .from('user_answers')
+        .select(`
+          question_id,
+          answer_value,
+          answer_text,
+          importance,
+          is_dealbreaker,
+          created_at,
+          questions (
+            text_ko,
+            category,
+            effectiveness_score
+          )
+        `)
+        .eq('user_id', userId);
+
+      if (answersError) {
+        console.error('❌ Error fetching answers:', answersError);
+        throw new Error(`Failed to fetch answers: ${answersError.message}`);
+      }
+
+      // Define proper question order (Q1-Q40)
+      const questionOrder = [
+        'marriage_timeline', 'children_plan', 'disability_acceptance', 'conflict_resolution', 'trust_jealousy',
+        'emotional_support', 'communication_frequency', 'attachment_style', 'love_language', 'date_frequency',
+        'anniversary_importance', 'future_planning', 'personal_space', 'social_life_balance', 'physical_affection',
+        'parents_relationship', 'holiday_obligations', 'financial_transparency', 'career_priority', 'household_division',
+        'religion_spirituality', 'political_views', 'life_goals', 'money_attitude', 'gender_preference',
+        'living_location', 'pet_preference', 'exercise_habits', 'drinking_habits', 'smoking_status',
+        'travel_preference', 'food_preference', 'sleep_schedule', 'cleanliness', 'introvert_extrovert',
+        'personal_values_lifestyle', 'ideal_relationship_dynamic', 'future_life_vision', 'conflict_growth_philosophy', 'life_philosophy_happiness'
+      ];
+
+      // Transform answers to match interface
+      const answers: Answer[] = (answersData || []).map((item: any) => ({
+        question_id: item.question_id,
+        answer_value: item.answer_value || item.answer_text || '',
+        importance: item.importance,
+        is_dealbreaker: item.is_dealbreaker,
+        timestamp: item.created_at,
+        question_text: item.questions?.text_ko,
+        category: item.questions?.category
+      }));
+
+      // Sort answers by question order (Q1-Q40)
+      answers.sort((a, b) => {
+        const indexA = questionOrder.indexOf(a.question_id);
+        const indexB = questionOrder.indexOf(b.question_id);
+        return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
       });
 
-      if (error) {
-        console.error('❌ Error getting user profile:', error);
-        throw new Error(`Failed to get user profile: ${error.message}`);
-      }
+      const totalAnswers = answers.length;
+      
+      // Get profile info and embedding status
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('user_id, nickname, profile_embedding')
+        .eq('user_id', userId)
+        .single();
 
-      if (!data) {
-        console.log('📭 No profile data found for user');
-        return null;
-      }
-
-      const profileData = typeof data === 'string' ? JSON.parse(data) : data;
+      const hasEmbedding = profileData?.profile_embedding !== null;
       
       // Calculate completion metrics
-      const totalAnswers = profileData.total_answers || 0;
       const completionPercentage = Math.min(100, (totalAnswers / this.TOTAL_QUESTIONS) * 100);
       const canStartMatching = totalAnswers >= this.MIN_QUESTIONS_FOR_MATCHING;
 
       const profile: UserProfile = {
         user_id: userId,
-        answers: profileData.answers || [],
+        answers: answers,
         total_answers: totalAnswers,
         embedding_status: {
-          has_embedding: profileData.embedding_status?.has_embedding || false,
-          embedding_dimension: profileData.embedding_status?.embedding_dimension,
-          created_at: profileData.embedding_status?.created_at,
-          message: profileData.embedding_status?.has_embedding 
+          has_embedding: hasEmbedding,
+          embedding_dimension: hasEmbedding ? 1024 : undefined,
+          created_at: undefined,
+          message: hasEmbedding 
             ? 'Profile ready for matching'
             : 'Complete more questions to enable matching'
         },
