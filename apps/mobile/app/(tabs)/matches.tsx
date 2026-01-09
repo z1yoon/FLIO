@@ -382,6 +382,7 @@ export default function MatchesScreen() {
                   
                   {/* Summary Card */}
                   <View style={styles.aiSummaryCard}>
+                    <Text style={styles.aiSummaryLabel}>요약</Text>
                     <Text style={styles.aiSummaryText}>{explanation.ai_analysis.summary}</Text>
                   </View>
                   
@@ -748,6 +749,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
+  },
+  aiSummaryLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4FD1C7',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   aiSummaryText: {
     fontSize: 16,

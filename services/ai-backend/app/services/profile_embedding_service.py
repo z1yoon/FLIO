@@ -220,13 +220,13 @@ class ProfileEmbeddingService:
                 logger.info(f"Processing profile: {profile}")
                 compatibility_score = await self._calculate_compatibility(user_id, profile['user_id'])
                 
-                # Calculate raw static question match percentage (before weighting)
-                raw_static_score = await self._calculate_static_question_score(user_id, profile['user_id'])
+                # Calculate exact match percentage (not weighted) for filtering
+                exact_match_rate = await self._calculate_exact_match_rate(user_id, profile['user_id'])
                 
-                # Filter out matches with less than 50% static question compatibility
+                # Filter out matches with less than 50% exact question matches
                 # Static questions are fundamental for compatibility - embedding similarity alone is not enough
-                if raw_static_score < 0.5:
-                    logger.info(f"Filtered out {profile.get('name')} due to low static question match: {raw_static_score*100:.1f}% (minimum 50% required)")
+                if exact_match_rate < 0.5:
+                    logger.info(f"Filtered out {profile.get('name')} due to low exact match rate: {exact_match_rate*100:.1f}% (minimum 50% required)")
                     continue
                 
                 match_result = MatchResult(
@@ -488,9 +488,44 @@ class ProfileEmbeddingService:
             logger.error(f"Cultural bonus calculation failed: {e}")
             return 0.0
     
+    async def _calculate_exact_match_rate(self, user_a_id: str, user_b_id: str) -> float:
+        """
+        Calculate exact match rate (no partial matches) for filtering
+        Used for 50% minimum threshold
+        """
+        try:
+            text_question_ids = {
+                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'future_life_vision',
+                'conflict_growth_philosophy', 'life_philosophy_happiness'
+            }
+            
+            answers_a = await self._fetch_user_answers(user_a_id)
+            answers_b = await self._fetch_user_answers(user_b_id)
+            
+            exact_matches = 0
+            total_questions = 0
+            
+            for question_id in answers_a.keys():
+                if question_id in text_question_ids:
+                    continue
+                    
+                if question_id in answers_b:
+                    if answers_a[question_id] == answers_b[question_id]:
+                        exact_matches += 1
+                    total_questions += 1
+            
+            exact_rate = exact_matches / total_questions if total_questions > 0 else 0.0
+            logger.info(f"Exact match rate: {exact_matches}/{total_questions} = {exact_rate:.1%}")
+            return exact_rate
+            
+        except Exception as e:
+            logger.error(f"Exact match calculation failed: {e}")
+            return 0.0
+    
     async def _calculate_static_question_score(self, user_a_id: str, user_b_id: str) -> float:
         """
         Calculate compatibility based on static choice question matching only
+        Includes partial matches (0.5 weight) for scoring
         Excludes text questions (which are used for embedding similarity instead)
         """
         try:
@@ -522,7 +557,7 @@ class ProfileEmbeddingService:
                         matching_score += 0.5
                     total_questions += 1
             
-            logger.info(f"Static question score: {matching_score}/{total_questions} = {matching_score/total_questions if total_questions > 0 else 0:.1%}")
+            logger.info(f"Static question score (weighted): {matching_score}/{total_questions} = {matching_score/total_questions if total_questions > 0 else 0:.1%}")
             return matching_score / total_questions if total_questions > 0 else 0.0
             
         except Exception as e:
