@@ -143,11 +143,11 @@ async def find_matches(
             matches=matches_dict,
             total_found=len(filtered_matches),
             metadata={
-                "algorithm_version": "3.0-static-priority",
+                "algorithm_version": "3.1-balanced",
                 "embedding_dimension": 1024,
-                "static_questions_weight": 0.7,
+                "static_questions_weight": 0.6,
                 "importance_bonus_weight": 0.2,
-                "embedding_weight": 0.1,
+                "embedding_weight": 0.2,
                 "dealbreaker_filtering": True
             }
         )
@@ -191,6 +191,70 @@ async def get_match_explanation(user_a_id: str, user_b_id: str):
     except Exception as e:
         logger.error(f"Failed to generate explanation for {user_a_id} and {user_b_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Explanation generation failed: {str(e)}")
+
+
+class ReshuffleRequest(BaseModel):
+    user_id: str
+    preference: str
+    limit: int = 10
+    min_compatibility: float = 0.3
+
+
+@router.post("/reshuffle-matches", response_model=MatchesResponse)
+async def reshuffle_matches_with_preference(request: ReshuffleRequest):
+    """
+    Find new matches based on user's preference/feedback
+    Uses the same matching algorithm but logs the preference for future improvements
+    
+    - **user_id**: User's unique identifier
+    - **preference**: User's preference or reason for reshuffling (e.g., "더 비슷한 취미를 가진 분")
+    - **limit**: Maximum number of matches to return (1-50)
+    - **min_compatibility**: Minimum compatibility score (0.0-1.0)
+    """
+    try:
+        logger.info(f"Reshuffle request from user {request.user_id} with preference: {request.preference}")
+        
+        # For now, use the same matching algorithm
+        # In the future, this could use the preference to adjust weights or filter criteria
+        match_results = await profile_embedding_service.find_compatible_matches(
+            request.user_id, 
+            request.limit * 2
+        )
+        
+        # Filter by minimum compatibility
+        filtered_matches = [
+            match for match in match_results 
+            if match.compatibility_score >= request.min_compatibility
+        ]
+        
+        # Limit results
+        final_matches = filtered_matches[:request.limit]
+        
+        # Convert to dict for serialization
+        matches_dict = [match.dict() for match in final_matches]
+        
+        logger.info(f"Found {len(final_matches)} matches for user {request.user_id} with preference")
+        
+        return MatchesResponse(
+            user_id=request.user_id,
+            matches=matches_dict,
+            total_found=len(filtered_matches),
+            metadata={
+                "algorithm_version": "3.1-balanced",
+                "embedding_dimension": 1024,
+                "static_questions_weight": 0.6,
+                "importance_bonus_weight": 0.2,
+                "embedding_weight": 0.2,
+                "dealbreaker_filtering": True,
+                "user_preference": request.preference
+            }
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to reshuffle matches for user {request.user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Match reshuffling failed: {str(e)}")
 
 
 # Legacy endpoints for backward compatibility

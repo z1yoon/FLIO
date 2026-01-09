@@ -306,18 +306,6 @@ export default function MatchesScreen() {
                         {Math.round(match.compatibility_score * 100)}%
                       </Text>
                     </View>
-                    <View style={styles.compatibilityItem}>
-                      <Text style={styles.compatibilityLabel}>성향 유사도</Text>
-                      <Text style={styles.compatibilityValue}>
-                        {Math.round(match.similarity_score * 100)}%
-                      </Text>
-                    </View>
-                    <View style={styles.compatibilityItem}>
-                      <Text style={styles.compatibilityLabel}>문화적 궁합</Text>
-                      <Text style={styles.compatibilityValue}>
-                        {Math.round(match.cultural_bonus * 100)}%
-                      </Text>
-                    </View>
                   </View>
                 </View>
 
