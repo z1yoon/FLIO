@@ -106,6 +106,7 @@ npx expo start
 |---------|---------|------------|
 | **Hybrid Matching** | Choice questions + semantic embeddings | PostgreSQL + pgvector |
 | **Profile Embedding** | Convert text answers to vectors | Azure OpenAI text-embedding-3-large |
+| **Translation** | Korean to English for cost optimization | Azure Translator (60% cost reduction) |
 | **Answer Analysis** | Analyze clarity and extract insights | Azure OpenAI gpt-4o-mini |
 | **Match Explanation** | Generate compatibility reasons | Azure OpenAI gpt-4o-mini |
 | **Dealbreaker Filter** | Exclude incompatible matches | PostgreSQL functions |
@@ -116,8 +117,8 @@ npx expo start
 
 **Three-Component Scoring System:**
 
-1. **Static Question Matching (70% weight)** - PRIMARY
-   - Direct comparison of **37 choice questions** (excludes 5 text questions)
+1. **Static Question Matching (60% weight)** - PRIMARY
+   - Direct comparison of **35 active choice questions** (excludes 5 text questions)
    - Exact matches score 1.0, partial matches score 0.5
    - Covers lifestyle, values, and relationship preferences
    - Fast PostgreSQL-based comparison
@@ -129,19 +130,20 @@ npx expo start
    - User-defined priorities and dealbreakers influence final score
    - Filters out incompatible matches early
 
-3. **Azure Embedding Similarity (10% weight)** - SUPPLEMENTARY
+3. **Azure Embedding Similarity (20% weight)** - SEMANTIC UNDERSTANDING
    - Uses Azure OpenAI text-embedding-3-large (1024 dimensions)
    - Based on **5 open-ended text questions** only
    - Semantic understanding of values, life philosophy, relationship dynamics
    - Captures nuanced compatibility beyond explicit answers
    - Cosine similarity between profile embeddings
+   - **Cost optimization**: Korean text translated to English before embedding (60% cost reduction)
 
-**Formula:** `Total Score = (Static × 0.7) + (Importance × 0.2) + (Embedding × 0.1)`
+**Formula:** `Total Score = (Static × 0.6) + (Importance × 0.2) + (Embedding × 0.2)`
 
 **Question Breakdown:**
-- **35 Active Static Choice Questions**: Used for exact/partial matching (70% weight)
-- **5 Open-Ended Text Questions**: Used for embedding similarity (10% weight)
-- **Total: 40 Active Questions** (2 choice questions unused: environmental_values, sexual_orientation)
+- **35 Active Static Choice Questions**: Used for exact/partial matching (60% weight)
+- **5 Open-Ended Text Questions**: Used for embedding similarity (20% weight)
+- **Total: 40 Active Questions**
 
 **Quality Thresholds:**
 - **Minimum Static Match: 50%** - Users must match on at least 50% of static choice questions
