@@ -37,6 +37,7 @@ export default function MatchesScreen() {
   const [showReshuffleDialog, setShowReshuffleDialog] = useState(false);
   const [reshufflePreference, setReshufflePreference] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
 
   // Get authenticated user ID on mount
   useEffect(() => {
@@ -52,25 +53,15 @@ export default function MatchesScreen() {
       if (isRefresh) setRefreshing(true);
       else setIsLoading(true);
 
-      // Get current user ID
+      // Get current user ID - should be available since auth is handled at root level
       const userId = currentUserId || await getCurrentUserId();
       if (!userId) {
-        FLIOAlertAPI.alert('오류', '로그인이 필요합니다.');
-        router.replace('/(auth)/login');
+        console.error('❌ No user ID available in matches screen');
+        FLIOAlertAPI.alert('오류', '사용자 정보를 불러올 수 없습니다.');
         return;
       }
 
       console.log('🔄 Loading AI-powered matches...');
-
-      // Check if user has answered questions first
-      const userProfile = await supabaseQuestionService.getUserProfile(userId);
-      const hasAnsweredQuestions = (userProfile?.total_answers || 0) > 0;
-
-      if (!hasAnsweredQuestions) {
-        console.log('⚠️ No questions answered yet - redirecting to questions');
-        router.replace('/(onboarding)/questions');
-        return;
-      }
 
       // Check if user has profile embedding
       const embeddingStatus = await aiQuestionService.checkEmbeddingStatus(userId);
@@ -108,11 +99,16 @@ export default function MatchesScreen() {
   const handleMatchPress = async (match: MatchResult) => {
     try {
       setSelectedMatch(match);
+      setIsLoadingExplanation(true);
+      setShowExplanation(true);
       
       console.log(`🔍 Getting AI explanation for match with ${match.user_id}...`);
       
       const userId = currentUserId || await getCurrentUserId();
-      if (!userId) return;
+      if (!userId) {
+        setIsLoadingExplanation(false);
+        return;
+      }
       
       const explanationResult = await aiQuestionService.getMatchExplanation(
         userId, 
@@ -121,13 +117,16 @@ export default function MatchesScreen() {
 
       if (explanationResult.explanation) {
         setExplanation(explanationResult.explanation);
-        setShowExplanation(true);
       } else {
+        setShowExplanation(false);
         FLIOAlertAPI.alert('오류', explanationResult.error || '매칭 분석을 불러올 수 없습니다.');
       }
     } catch (error) {
       console.error('❌ Failed to get match explanation:', error);
+      setShowExplanation(false);
       FLIOAlertAPI.alert('오류', '매칭 분석 중 문제가 발생했습니다.');
+    } finally {
+      setIsLoadingExplanation(false);
     }
   };
 
@@ -230,7 +229,7 @@ export default function MatchesScreen() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.titleSection}>
-            <Text style={styles.headerTitle}>AI 매칭 💕</Text>
+            <Text style={styles.headerTitle}>AI 매칭</Text>
             <Text style={styles.headerSubtitle}>당신과 잘 맞는 특별한 분들</Text>
           </View>
           <TouchableOpacity
@@ -293,7 +292,7 @@ export default function MatchesScreen() {
                 {/* Profile Info */}
                 <View style={styles.profileInfo}>
                   <Text style={styles.profileName}>
-                    {match.nickname || `사용자 ${match.user_id.slice(0, 8)}`}
+                    {match.name || `사용자 ${match.user_id.slice(0, 8)}`}
                   </Text>
                   {match.age && (
                     <Text style={styles.profileAge}>{match.age}세</Text>
@@ -344,19 +343,41 @@ export default function MatchesScreen() {
       </ScrollView>
 
       {/* Match Explanation Modal */}
-      {showExplanation && explanation && selectedMatch && (
+      {showExplanation && selectedMatch && (
         <View style={styles.modalOverlay}>
           <View style={styles.explanationModal}>
             <TouchableOpacity
               style={styles.closeButton}
               onPress={closeExplanation}
             >
-              <Ionicons name="close" size={24} color="#666" />
+              <Ionicons name="close" size={24} color="#FFFFFF" />
             </TouchableOpacity>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Loading State */}
+            {isLoadingExplanation ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#4FD1C7" />
+                <Text style={styles.loadingTitle}>💒 AI 매칭 매니저가 분석 중이에요</Text>
+                <Text style={styles.loadingSubtitle}>
+                  {selectedMatch.name || '회원'}님과의 인연을{'\n'}정성껏 분석하고 있습니다
+                </Text>
+                <View style={styles.loadingSteps}>
+                  <Text style={styles.loadingStep}>✨ 두 분의 성격 유형을 비교하고 있어요</Text>
+                  <Text style={styles.loadingStep}>💕 가치관과 라이프스타일을 분석 중이에요</Text>
+                  <Text style={styles.loadingStep}>📊 호환성 점수를 계산하고 있어요</Text>
+                  <Text style={styles.loadingStep}>💌 맞춤 조언을 준비하고 있어요</Text>
+                </View>
+                <Text style={styles.loadingHint}>잠시만 기다려주세요...</Text>
+              </View>
+            ) : explanation ? (
+              <ScrollView 
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={true}
+              bounces={true}
+              contentContainerStyle={styles.scrollContent}
+            >
               <Text style={styles.explanationTitle}>
-                AI 매칭 분석 🧠
+                💒 매칭 매니저 분석
               </Text>
               
               <View style={styles.compatibilityHeader}>
@@ -366,20 +387,59 @@ export default function MatchesScreen() {
                 <Text style={styles.compatibilityLabel}>호환성</Text>
               </View>
 
-              <Text style={styles.explanationSummary}>
-                {explanation.summary}
-              </Text>
-
-              {explanation.compatibility_reasons.length > 0 && (
+              {/* AI Deep Analysis - Marriage Manager Style */}
+              {explanation.ai_analysis?.summary && (
                 <View style={styles.reasonsSection}>
-                  <Text style={styles.sectionTitle}>💕 호환되는 이유</Text>
-                  {explanation.compatibility_reasons.map((reason, index) => (
-                    <View key={index} style={styles.reasonItem}>
-                      <Text style={styles.reasonText}>• {reason}</Text>
+                  <Text style={styles.aiSectionTitle}>💝 매니저의 매칭 분석</Text>
+                  <View style={styles.aiAnalysisFlow}>
+                    <Text style={styles.aiFlowText}>{explanation.ai_analysis.summary}</Text>
+                    
+                    {explanation.ai_analysis.compatibility_reasons?.length > 0 && (
+                      <>
+                        {explanation.ai_analysis.compatibility_reasons.map((reason: string, index: number) => (
+                          <Text key={index} style={styles.aiFlowText}>
+                            {'\n\n'}{reason}
+                          </Text>
+                        ))}
+                      </>
+                    )}
+                  </View>
+                </View>
+              )}
+              
+              {/* Category Graphs - Visual Stats */}
+              {explanation.compatibility_graphs && Object.keys(explanation.compatibility_graphs).length > 0 && (
+                <View style={styles.reasonsSection}>
+                  <Text style={styles.sectionTitle}>📊 영역별 호환성</Text>
+                  
+                  {/* Total Questions Summary */}
+                  <View style={styles.totalQuestionsCard}>
+                    <Text style={styles.totalQuestionsLabel}>전체 질문 일치도</Text>
+                    <Text style={styles.totalQuestionsCount}>
+                      {Object.values(explanation.compatibility_graphs).reduce((sum: number, cat: any) => sum + (cat.matching_questions || 0), 0)}/
+                      {Object.values(explanation.compatibility_graphs).reduce((sum: number, cat: any) => sum + (cat.total_questions || 0), 0)}
+                    </Text>
+                    <Text style={styles.totalQuestionsSubtext}>질문 일치</Text>
+                  </View>
+                  
+                  {/* Category Bar Graphs */}
+                  {Object.entries(explanation.compatibility_graphs).map(([category, stats]: [string, any]) => (
+                    <View key={category} style={styles.categoryGraphItem}>
+                      <View style={styles.categoryHeader}>
+                        <Text style={styles.categoryName}>{category}</Text>
+                        <Text style={styles.categoryPercentage}>{Math.round(stats.match_percentage)}%</Text>
+                      </View>
+                      <View style={styles.progressBarContainer}>
+                        <View style={[styles.progressBar, { width: `${stats.match_percentage}%` }]} />
+                      </View>
+                      <Text style={styles.categoryDetail}>
+                        {stats.matching_questions}/{stats.total_questions} 일치
+                      </Text>
                     </View>
                   ))}
                 </View>
               )}
+
 
               {explanation.conversation_starters.length > 0 && (
                 <View style={styles.startersSection}>
@@ -403,7 +463,8 @@ export default function MatchesScreen() {
                 <Ionicons name="heart" size={20} color="#FFFFFF" />
                 <Text style={styles.sendMessageText}>좋아요 보내기</Text>
               </TouchableOpacity>
-            </ScrollView>
+              </ScrollView>
+            ) : null}
           </View>
         </View>
       )}
@@ -636,7 +697,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   explanationModal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2E7D7A',
     borderRadius: 20,
     padding: 24,
     maxHeight: '80%',
@@ -647,11 +708,14 @@ const styles = StyleSheet.create({
     top: 16,
     right: 16,
     zIndex: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    padding: 8,
   },
   explanationTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#2E7D7A',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 20,
   },
@@ -660,16 +724,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   compatibilityPercentage: {
-    fontSize: 36,
+    fontSize: 48,
     fontWeight: '700',
     color: '#4FD1C7',
   },
   explanationSummary: {
     fontSize: 16,
-    color: '#333',
+    color: 'rgba(255,255,255,0.9)',
     lineHeight: 24,
+    marginBottom: 20,
     textAlign: 'center',
-    marginBottom: 24,
   },
   reasonsSection: {
     marginBottom: 24,
@@ -677,7 +741,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2E7D7A',
+    color: '#FFFFFF',
     marginBottom: 12,
   },
   reasonItem: {
@@ -685,7 +749,7 @@ const styles = StyleSheet.create({
   },
   reasonText: {
     fontSize: 14,
-    color: '#555',
+    color: 'rgba(255,255,255,0.9)',
     lineHeight: 20,
   },
   startersSection: {
@@ -716,7 +780,261 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  
+  totalQuestionsCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  totalQuestionsLabel: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: 8,
+  },
+  totalQuestionsCount: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#4FD1C7',
+    marginBottom: 4,
+  },
+  totalQuestionsSubtext: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  personalityCard: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  personalityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  personalityDescription: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  traitsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  traitTag: {
+    backgroundColor: 'rgba(79, 209, 199, 0.3)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  traitText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  matchSummaryCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 8,
+  },
+  matchSummaryText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.95)',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  aiAnalysisHeader: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 12,
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  // Loading styles
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 24,
+    marginBottom: 12,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 24,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  loadingSteps: {
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    padding: 20,
+    borderRadius: 16,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  loadingStep: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  loadingHint: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    marginTop: 24,
+    fontStyle: 'italic',
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  // AI Analysis emotional styles - NATURAL FLOW
+  aiSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4FD1C7',
+    marginBottom: 16,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  aiAnalysisFlow: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    padding: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4FD1C7',
+  },
+  aiFlowText: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    lineHeight: 26,
+    fontWeight: '400',
+  },
+  aiMainCard: {
+    backgroundColor: 'rgba(79, 209, 199, 0.2)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(79, 209, 199, 0.4)',
+  },
+  aiMainSummary: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    lineHeight: 26,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  aiSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4FD1C7',
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  aiReasonCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4FD1C7',
+  },
+  aiReasonText: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    lineHeight: 24,
+    fontWeight: '400',
+  },
+  aiAnalysisCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 16,
+  },
+  aiAnalysisSummary: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    lineHeight: 22,
+    marginBottom: 16,
+    fontStyle: 'italic',
+  },
+  emotionalReasonItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  emotionalReasonText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    lineHeight: 22,
+  },
+  // Category graph styles
+  categoryGraphItem: {
+    marginBottom: 16,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  categoryName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.9)',
+  },
+  categoryPercentage: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4FD1C7',
+  },
+  progressBarContainer: {
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#4FD1C7',
+    borderRadius: 4,
+  },
+  categoryDetail: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 4,
+  },
   // Header styles
   headerContent: {
     flexDirection: 'row',
@@ -746,7 +1064,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  
   // Reshuffle modal styles
   reshuffleModal: {
     backgroundColor: '#FFFFFF',

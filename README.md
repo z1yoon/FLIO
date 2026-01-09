@@ -4,15 +4,16 @@
 
 ## Features
 
-- 🧠 **Hybrid Matching Algorithm** - 50% choice questions + 40% embeddings + 10% importance weighting
-- 🎯 **Smart Question Design** - 35 choice questions + 5 open-ended questions optimized for matching
-- 🚫 **Dealbreaker Filtering** - 5 critical dealbreakers (marriage, children, disability acceptance, conflict, trust)
+- 🧠 **Hybrid Matching Algorithm** - Combines Azure AI embeddings with static question scoring
+- 🎯 **Smart Question Design** - 40 questions covering values, lifestyle, and compatibility
+- 🚫 **Dealbreaker Filtering** - Critical compatibility factors (marriage, children, values)
 - ♿ **Inclusive & Accessible** - Simple yes/no disability acceptance dealbreaker
 - 💰 **Cost Optimized** - Korean text translated to English for AI processing to reduce token costs
 - 📊 **AI Answer Analysis** - Real-time clarity scoring and insight extraction
-- 💬 **Match Explanations** - AI-generated compatibility reasons and conversation starters
+- 💬 **Match Explanations** - Azure OpenAI GPT-4o-mini generates personalized compatibility reasons
 - 🇰🇷 **Korean-Optimized** - Cultural values and relationship compatibility focus
 - 📱 **Modern Mobile App** - React Native + Expo with seamless UX
+- ✅ **Verified Names** - Real name verification for authentic connections
 
 ---
 
@@ -112,11 +113,44 @@ npx expo start
 ## Key Features
 
 ### 1. Hybrid Matching Algorithm
-- **Choice Questions (Q1-35)**: Exact matching with semantic `match_weight` values
-- **Text Questions (Q36-40)**: Semantic embedding similarity
-- **Scoring Formula**: 50% choice + 40% embedding + 10% importance
-- **Dealbreaker Filtering**: Automatic exclusion of incompatible users
-- **Performance**: SQL-optimized for sub-100ms matching
+
+**Three-Component Scoring System:**
+
+1. **Static Question Matching (70% weight)** - PRIMARY
+   - Direct comparison of **37 choice questions** (excludes 5 text questions)
+   - Exact matches score 1.0, partial matches score 0.5
+   - Covers lifestyle, values, and relationship preferences
+   - Fast PostgreSQL-based comparison
+   - Prioritizes concrete compatibility over abstract similarity
+
+2. **Importance Bonus (20% weight)** - DEALBREAKERS
+   - Rewards matching on questions marked as important (4-5 importance)
+   - Ensures critical compatibility factors are weighted heavily
+   - User-defined priorities and dealbreakers influence final score
+   - Filters out incompatible matches early
+
+3. **Azure Embedding Similarity (10% weight)** - SUPPLEMENTARY
+   - Uses Azure OpenAI text-embedding-3-large (1024 dimensions)
+   - Based on **5 open-ended text questions** only
+   - Semantic understanding of values, life philosophy, relationship dynamics
+   - Captures nuanced compatibility beyond explicit answers
+   - Cosine similarity between profile embeddings
+
+**Formula:** `Total Score = (Static × 0.7) + (Importance × 0.2) + (Embedding × 0.1)`
+
+**Question Breakdown:**
+- **35 Active Static Choice Questions**: Used for exact/partial matching (70% weight)
+- **5 Open-Ended Text Questions**: Used for embedding similarity (10% weight)
+- **Total: 40 Active Questions** (2 choice questions unused: environmental_values, sexual_orientation)
+
+**Quality Thresholds:**
+- **Minimum Static Match: 50%** - Users must match on at least 50% of static choice questions
+- Static questions are fundamental compatibility indicators (values, lifestyle, goals)
+- Embedding similarity alone is insufficient - concrete compatibility is required
+- Ensures all matches have meaningful baseline compatibility
+
+**Dealbreaker Filtering:** Automatic exclusion of incompatible users before scoring
+**Performance:** Optimized with pgvector for sub-second matching
 
 ### 2. Smart Question Design
 - **Dealbreakers First** (Q1-5): Marriage timeline, children, **disability acceptance (yes/no)**, conflict resolution, trust

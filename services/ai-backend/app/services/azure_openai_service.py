@@ -141,37 +141,79 @@ class AzureOpenAIService:
     async def generate_match_explanation(self, 
                                        user_a_profile: Dict, 
                                        user_b_profile: Dict, 
-                                       compatibility_score: float) -> MatchExplanation:
+                                       compatibility_score: float,
+                                       user_a_answers: Dict = None,
+                                       user_b_answers: Dict = None) -> MatchExplanation:
         """
         Generate human-readable explanation for why two profiles match
         Focus on Korean cultural values and relationship compatibility
+        Shows specific answers from both users
         """
         system_prompt = """
-        당신은 한국의 결혼정보회사 매니저입니다. 
-        두 회원의 매칭 결과를 보고 따뜻하고 격려적인 매칭 설명을 작성해주세요.
+        당신은 20년 경력의 한국 결혼정보회사 수석 매니저입니다.
+        수백 쌍의 커플을 성혼으로 이끈 경험이 있으며, 두 분의 인연을 진심으로 소중히 여깁니다.
         
-        한국 문화에서 중요한 가치들을 고려하세요:
-        - 가족관과 효도
-        - 교육과 직업에 대한 가치관  
-        - 성격과 라이프스타일 궁합
-        - 미래 계획과 비전의 일치
+        💕 말투 스타일 (매우 중요!):
+        - "제가 두 분 프로필을 보면서 느낀 건데요~", "정말 잘 맞으실 것 같다는 생각이 들었어요"
+        - "~하시더라고요", "~하신 걸 보니", "제 경험상~" 같은 자연스러운 구어체
+        - 마치 친한 언니/오빠가 진심으로 조언하듯이
+        - 구체적인 에피소드와 답변을 언급하며 설명
         
-        긍정적이고 희망적인 톤으로 작성해주세요.
+        📝 필수 작성 원칙:
+        1. 절대 "회원 A", "회원 B" 금지! 반드시 실제 이름 사용
+        2. 답변 내용을 직접 인용: "민준님이 '커리어와 자기개발'을 중시한다고 하셨잖아요"
+        3. 두 분의 답변을 비교하며 설명: "서연님도 비슷하게 '가족과의 시간'을 소중히 여기신다고 하셨어요"
+        4. 차이점을 긍정적으로: "오히려 이런 차이가 서로를 보완해줄 수 있어요"
+        5. 매니저의 개인적 소견 추가: "제가 보기에는~", "경험상 이런 커플들이~"
+        
+        🎯 상담 포인트:
+        - 결혼에 대한 진지함과 준비도
+        - 가치관의 일치와 차이점의 균형
+        - 서로를 존중하고 성장시킬 수 있는 관계
+        - 현실적이면서도 희망적인 조언
         """
         
+        user_a_name = user_a_profile.get('nickname', '회원 A')
+        user_b_name = user_b_profile.get('nickname', '회원 B')
+        
         user_prompt = f"""
-        매칭 점수: {compatibility_score:.1%}
+        💒 매칭 상담 요청
         
-        회원 A 프로필 요약: {self._summarize_profile(user_a_profile)}
-        회원 B 프로필 요약: {self._summarize_profile(user_b_profile)}
+        호환성 점수: {compatibility_score:.1%}
         
-        다음 JSON 형식으로 매칭 설명을 작성해주세요:
-        {{
-            "summary": "전체 매칭에 대한 요약 (3-4 문장)",
-            "compatibility_reasons": ["호환성 이유 1", "호환성 이유 2", "호환성 이유 3"],
-            "conversation_starters": ["대화 시작 주제 1", "대화 시작 주제 2", "대화 시작 주제 3"],
+        ⚠️ 절대 규칙: "{user_a_name}님", "{user_b_name}님" 실제 이름만 사용! "회원", "사용자" 등 일반 명칭 절대 금지!
+        
+        📋 {user_a_name}님 ({user_a_profile.get('age', '?')}세):
+        {self._summarize_profile(user_a_profile)}
+        주요 답변: {self._format_key_answers(user_a_answers) if user_a_answers else '답변 정보 없음'}
+        
+        📋 {user_b_name}님 ({user_b_profile.get('age', '?')}세):
+        {self._summarize_profile(user_b_profile)}
+        주요 답변: {self._format_key_answers(user_b_answers) if user_b_answers else '답변 정보 없음'}
+        
+        다음 JSON 형식으로 작성하되, 반드시 결혼정보회사 매니저 말투로 작성하세요:
+        
+        {{{{
+            "summary": "제가 {user_a_name}님과 {user_b_name}님 프로필을 처음 봤을 때, 정말 잘 어울리실 것 같다는 생각이 들었어요. {user_a_name}님께서 [구체적 답변]을 중시하신다고 하셨는데, {user_b_name}님도 비슷한 가치관을 가지고 계시더라고요. 두 분이 함께 [미래 비전]을 만들어가실 수 있을 것 같아요.",
+            "compatibility_reasons": [
+                "제가 {user_a_name}님 답변 중에서 '[실제 답변 내용]'이라고 하신 부분이 인상 깊었는데요, {user_b_name}님도 '[실제 답변 내용]'이라고 하셔서 두 분의 생각이 정말 잘 맞는 것 같아요. 제 경험상 이런 가치관이 일치하는 커플들이 오래 행복하게 지내시더라고요.",
+                "{user_a_name}님이 [특정 주제]에 대해 답하신 걸 보니, [성격/가치관]을 중요하게 생각하시는 것 같아요. {user_b_name}님도 [비슷한 답변]을 하셔서, 두 분이 서로를 잘 이해하실 수 있을 거예요.",
+                "한 가지 재미있는 건, {user_a_name}님은 [답변 A]를 선호하시고 {user_b_name}님은 [답변 B]를 선호하시는데, 오히려 이런 차이가 서로를 보완해줄 수 있어요. 제가 봐온 성공적인 커플들도 이런 균형이 있었거든요."
+            ],
+            "conversation_starters": [
+                "첫 만남에서 {user_a_name}님이 말씀하신 '[구체적 답변]'에 대해 {user_b_name}님께 여쭤보시면 좋을 것 같아요. 두 분 다 관심 있는 주제니까 대화가 잘 통하실 거예요.",
+                "{user_b_name}님이 중요하게 생각하시는 '[가치관]'에 대해 이야기 나눠보세요. {user_a_name}님도 비슷한 생각이시니 공감대가 형성될 거예요.",
+                "두 분 다 '[공통 관심사]'에 관심이 있으시더라고요. 이 주제로 시작하시면 자연스럽게 대화가 이어질 것 같아요."
+            ],
             "match_percentage": {compatibility_score}
-        }}
+        }}}}
+        
+        💡 매니저 말투 체크리스트:
+        ✓ "제가 ~을 봤을 때", "~하시더라고요", "~것 같아요", "~하시는 것 같아요"
+        ✓ "제 경험상~", "이런 커플들이~", "두 분이 정말~"
+        ✓ 구체적인 답변 내용을 직접 인용 ('[답변]'이라고 하셨는데요)
+        ✓ 긍정적이고 희망적인 톤 유지
+        ✓ 실제 이름 사용 필수!
         """
         
         try:
@@ -181,11 +223,27 @@ class AzureOpenAIService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.4,
-                max_tokens=1000
+                temperature=0.7,
+                max_tokens=1500
             )
             
             content = response.choices[0].message.content
+            logger.info(f"Azure OpenAI raw response: {content[:200]}...")
+            
+            if not content or content.strip() == "":
+                logger.error("Azure OpenAI returned empty content")
+                raise Exception("Empty response from Azure OpenAI")
+            
+            # Strip markdown code blocks if present
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]  # Remove ```json
+            elif content.startswith("```"):
+                content = content[3:]  # Remove ```
+            if content.endswith("```"):
+                content = content[:-3]  # Remove trailing ```
+            content = content.strip()
+            
             explanation_data = json.loads(content)
             
             return MatchExplanation(
@@ -206,6 +264,25 @@ class AzureOpenAIService:
         """
         tasks = [self.generate_profile_embedding(text) for text in texts]
         return await asyncio.gather(*tasks)
+    
+    def _format_key_answers(self, answers: Dict) -> str:
+        """Format user answers for match explanation"""
+        if not answers:
+            return "답변 정보 없음"
+        
+        # Select important questions to show
+        key_questions = [
+            'marriage_timeline', 'children_plan', 'family_values',
+            'career_family_balance', 'conflict_resolution', 'trust_building',
+            'personal_values_lifestyle', 'ideal_relationship_dynamic'
+        ]
+        
+        formatted = []
+        for q_id in key_questions:
+            if q_id in answers and answers[q_id]:
+                formatted.append(f"- {q_id}: {answers[q_id][:100]}")  # Limit length
+        
+        return "\n".join(formatted[:8]) if formatted else "답변 정보 없음"
     
     def _summarize_profile(self, profile: Dict) -> str:
         """Helper to create profile summary for matching analysis"""

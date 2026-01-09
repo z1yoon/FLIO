@@ -34,8 +34,8 @@ export default function ProfileScreen() {
 
       const userId = currentUserId || await getCurrentUserId();
       if (!userId) {
-        console.log('⚠️ No authenticated user - redirecting to login');
-        router.replace('/(auth)/login');
+        console.error('❌ No user ID available in profile screen');
+        FLIOAlertAPI.alert('오류', '사용자 정보를 불러올 수 없습니다.');
         return;
       }
 
@@ -179,13 +179,14 @@ export default function ProfileScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>내 프로필 👤</Text>
+        <Text style={styles.headerTitle}>내 프로필</Text>
         <Text style={styles.headerSubtitle}>질문 답변 현황</Text>
       </View>
 
       <ScrollView
         style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -243,17 +244,10 @@ export default function ProfileScreen() {
                 activeOpacity={0.7}
               >
                 <View style={styles.answerHeader}>
-                  <Text style={styles.questionText}>{answer.question_text || '질문'}</Text>
-                  <View style={styles.answerMeta}>
-                    {answer.is_dealbreaker && (
-                      <View style={styles.dealbreakerBadge}>
-                        <Text style={styles.dealbreakerText}>중요</Text>
-                      </View>
-                    )}
-                    <Text style={styles.importanceText}>
-                      {answer.importance}/5
-                    </Text>
+                  <View style={styles.questionNumberBadge}>
+                    <Text style={styles.questionNumberText}>Q{index + 1}</Text>
                   </View>
+                  <Text style={styles.questionText}>{answer.question_text || '질문'}</Text>
                 </View>
                 
                 <Text style={styles.answerText}>
@@ -314,7 +308,9 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    paddingBottom: 100,
+  },
+  scrollContent: {
+    paddingBottom: 120,
   },
   statusCard: {
     backgroundColor: 'rgba(255,255,255,0.1)',
@@ -389,13 +385,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
+    gap: 8,
+  },
+  questionNumberBadge: {
+    backgroundColor: '#4FD1C7',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  questionNumberText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1A5F5A',
   },
   questionText: {
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
-    marginRight: 12,
   },
   answerMeta: {
     flexDirection: 'row',

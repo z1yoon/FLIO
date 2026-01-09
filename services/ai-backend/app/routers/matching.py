@@ -27,8 +27,9 @@ class MatchResult(BaseModel):
     compatibility_score: float
     similarity_score: float
     cultural_bonus: float
-    nickname: Optional[str] = None
+    name: Optional[str] = None
     age: Optional[int] = None
+    explanation: Optional[str] = None
 
 class MatchesResponse(BaseModel):
     user_id: str
@@ -39,9 +40,13 @@ class MatchesResponse(BaseModel):
 class MatchExplanationResponse(BaseModel):
     compatibility_score: float
     summary: str
-    compatibility_reasons: List[str]
+    statistical_insights: List[str]
+    compatibility_graphs: Dict[str, Dict]
+    personalized_insights: Dict[str, Any]
+    ai_analysis: Optional[Dict] = None
     conversation_starters: List[str]
     detailed_scores: Dict[str, float]
+    score_breakdown: Dict[str, str]
 
 # Profile Embedding Endpoints
 
@@ -55,7 +60,7 @@ async def create_user_embedding(user_id: str):
     """
     try:
         # Create user profile embedding
-        user_profile = await profile_embedding_service.create_user_embedding(user_id)
+        user_profile = await profile_embedding_service.create_user_profile_embedding(user_id)
         
         return ProfileEmbeddingResponse(
             success=True,
@@ -130,16 +135,19 @@ async def find_matches(
         # Limit results
         final_matches = filtered_matches[:limit]
         
+        # Convert to dict for serialization
+        matches_dict = [match.dict() for match in final_matches]
+        
         return MatchesResponse(
             user_id=user_id,
-            matches=final_matches,
-            total_found=len(matches),
+            matches=matches_dict,
+            total_found=len(filtered_matches),
             metadata={
-                "algorithm_version": "2.0-hybrid",
+                "algorithm_version": "3.0-static-priority",
                 "embedding_dimension": 1024,
-                "choice_weight": 0.5,
-                "embedding_weight": 0.4,
-                "importance_bonus": 0.1,
+                "static_questions_weight": 0.7,
+                "importance_bonus_weight": 0.2,
+                "embedding_weight": 0.1,
                 "dealbreaker_filtering": True
             }
         )
@@ -169,9 +177,13 @@ async def get_match_explanation(user_a_id: str, user_b_id: str):
         return MatchExplanationResponse(
             compatibility_score=explanation_data['compatibility_score'],
             summary=explanation['summary'],
-            compatibility_reasons=explanation['compatibility_reasons'],
-            conversation_starters=explanation['conversation_starters'],
-            detailed_scores=explanation_data['detailed_scores']
+            statistical_insights=explanation.get('statistical_insights', []),
+            compatibility_graphs=explanation.get('compatibility_graphs', {}),
+            personalized_insights=explanation.get('personalized_insights', {}),
+            ai_analysis=explanation.get('ai_analysis'),
+            conversation_starters=explanation.get('conversation_starters', []),
+            detailed_scores=explanation_data['detailed_scores'],
+            score_breakdown=explanation_data.get('score_breakdown', {})
         )
         
     except ValueError as e:

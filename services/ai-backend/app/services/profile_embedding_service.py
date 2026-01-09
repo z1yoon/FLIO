@@ -33,6 +33,8 @@ class MatchResult(BaseModel):
     compatibility_score: float
     similarity_score: float
     cultural_bonus: float
+    name: Optional[str] = None
+    age: Optional[int] = None
     explanation: Optional[Dict] = None
 
 class ProfileEmbeddingService:
@@ -192,7 +194,7 @@ class ProfileEmbeddingService:
     async def find_compatible_matches(self, user_id: str, limit: int = 10) -> List[MatchResult]:
         """
         Find compatible matches for a user based on embedding similarity
-        Core matching algorithm for the dating app
+        Core matching algorithm for the dating app with dealbreaker filtering
         """
         try:
             # 1. Get user's embedding
@@ -200,23 +202,45 @@ class ProfileEmbeddingService:
             if not user_embedding:
                 raise ValueError(f"No embedding found for user {user_id}")
             
-            # 2. Find similar profiles using Supabase vector search
-            similar_profiles = await self._vector_similarity_search(user_id, user_embedding, limit * 2)
+            # 2. Get user's dealbreaker questions
+            user_dealbreakers = await self._get_dealbreakers(user_id)
+            logger.info(f"User {user_id} has {len(user_dealbreakers)} dealbreakers")
             
-            # 3. Calculate detailed compatibility scores
+            # 3. Find similar profiles using Supabase vector search (get more to account for filtering)
+            similar_profiles = await self._vector_similarity_search(user_id, user_embedding, limit * 5)
+            
+            # 4. Filter by dealbreakers and calculate compatibility scores
             match_results = []
             for profile in similar_profiles:
+                # Check dealbreaker compatibility
+                if not await self._check_dealbreaker_compatibility(user_id, profile['user_id'], user_dealbreakers):
+                    logger.info(f"Filtered out {profile.get('name')} due to dealbreaker mismatch")
+                    continue
+                
+                logger.info(f"Processing profile: {profile}")
                 compatibility_score = await self._calculate_compatibility(user_id, profile['user_id'])
+                
+                # Calculate raw static question match percentage (before weighting)
+                raw_static_score = await self._calculate_static_question_score(user_id, profile['user_id'])
+                
+                # Filter out matches with less than 50% static question compatibility
+                # Static questions are fundamental for compatibility - embedding similarity alone is not enough
+                if raw_static_score < 0.5:
+                    logger.info(f"Filtered out {profile.get('name')} due to low static question match: {raw_static_score*100:.1f}% (minimum 50% required)")
+                    continue
                 
                 match_result = MatchResult(
                     user_id=profile['user_id'],
                     compatibility_score=compatibility_score['total_score'],
                     similarity_score=compatibility_score['similarity_score'],
-                    cultural_bonus=compatibility_score['cultural_bonus']
+                    cultural_bonus=compatibility_score['cultural_bonus'],
+                    name=profile.get('name'),
+                    age=profile.get('age')
                 )
+                logger.info(f"Match result: name={match_result.name}, age={match_result.age}, static_match={raw_static_score*100:.1f}%")
                 match_results.append(match_result)
             
-            # 4. Sort by compatibility and return top matches
+            # 5. Sort by compatibility and return top matches
             match_results.sort(key=lambda x: x.compatibility_score, reverse=True)
             return match_results[:limit]
             
@@ -227,27 +251,64 @@ class ProfileEmbeddingService:
     async def get_match_explanation(self, user_a_id: str, user_b_id: str) -> Dict:
         """
         Generate detailed explanation for why two users match
-        Uses Azure OpenAI to create human-readable explanation
+        Uses statistical analysis for static questions and AI only for open-ended questions
         """
         try:
             # Get both user profiles
             user_a_info = await self._fetch_user_profile_summary(user_a_id)
             user_b_info = await self._fetch_user_profile_summary(user_b_id)
             
+            # Get user answers with metadata
+            user_a_answers = await self._fetch_user_answers_with_metadata(user_a_id)
+            user_b_answers = await self._fetch_user_answers_with_metadata(user_b_id)
+            
             # Calculate compatibility score
             compatibility = await self._calculate_compatibility(user_a_id, user_b_id)
             
-            # Generate explanation using Azure OpenAI
-            explanation = await azure_openai_service.generate_match_explanation(
-                user_a_profile=user_a_info,
-                user_b_profile=user_b_info,
-                compatibility_score=compatibility['total_score']
+            # Generate statistical analysis for static questions
+            static_analysis = await self._generate_statistical_analysis(
+                user_a_answers, user_b_answers, user_a_info, user_b_info
             )
             
+            # Generate AI explanation only for open-ended text questions (Q36-40)
+            ai_explanation = await self._generate_ai_explanation_for_text_questions(
+                user_a_info, user_b_info, user_a_answers, user_b_answers, compatibility['total_score']
+            )
+            
+            # Debug logging
+            if ai_explanation:
+                logger.info(f"AI explanation type: {type(ai_explanation)}")
+                logger.info(f"AI explanation attributes: {dir(ai_explanation) if hasattr(ai_explanation, '__dict__') else 'No __dict__'}")
+                if hasattr(ai_explanation, '__dict__'):
+                    logger.info(f"AI explanation dict: {ai_explanation.__dict__}")
+                elif hasattr(ai_explanation, 'dict'):
+                    try:
+                        logger.info(f"AI explanation dict(): {ai_explanation.dict()}")
+                    except Exception as e:
+                        logger.error(f"Error calling dict(): {e}")
+            
+            # Generate personalized matching explanations
+            personalized_explanation = await self._generate_personalized_matching_explanation(
+                user_a_answers, user_b_answers, user_a_info, user_b_info, compatibility['total_score']
+            )
+
             return {
                 "compatibility_score": compatibility['total_score'],
-                "explanation": explanation.dict(),
-                "detailed_scores": compatibility
+                "explanation": {
+                    "summary": static_analysis['summary'],
+                    "statistical_insights": static_analysis['insights'],
+                    "compatibility_graphs": static_analysis['graphs'],
+                    "ai_analysis": self._safe_serialize_ai_explanation(ai_explanation),
+                    "personalized_insights": personalized_explanation,
+                    "conversation_starters": static_analysis['conversation_starters']
+                },
+                "detailed_scores": compatibility,
+                "score_breakdown": {
+                    "static_questions": f"{compatibility.get('static_score', 0):.1%} (70% weight)",
+                    "importance_bonus": f"{compatibility.get('importance_bonus', 0):.1%} (20% weight)",
+                    "azure_embedding": f"{compatibility.get('embedding_score', 0):.1%} (10% weight)",
+                    "total": f"{compatibility['total_score']:.1%}"
+                }
             }
             
         except Exception as e:
@@ -258,10 +319,14 @@ class ProfileEmbeddingService:
         """Fetch user's question answers from Supabase"""
         try:
             result = self.supabase.table('user_answers').select(
-                'question_id, answer_value'
+                'question_id, answer_value, answer_text'
             ).eq('user_id', user_id).execute()
             
-            return {item['question_id']: item['answer_value'] for item in result.data}
+            # Use answer_text for text questions, answer_value for choice questions
+            return {
+                item['question_id']: item['answer_text'] or item['answer_value'] 
+                for item in result.data
+            }
         except Exception as e:
             logger.error(f"Failed to fetch answers for user {user_id}: {e}")
             return {}
@@ -301,7 +366,7 @@ class ProfileEmbeddingService:
             embedding_vector = f"[{','.join(map(str, embedding))}]"
             
             # Use RPC function for better performance and error handling
-            result = self.supabase.rpc('store_user_embedding', {
+            result = self.supabase.rpc('store_profile_embedding', {
                 'p_user_id': user_id,
                 'p_embedding': embedding_vector,
                 'p_profile_text': profile_text
@@ -320,10 +385,10 @@ class ProfileEmbeddingService:
         """Get user's embedding from Supabase"""
         try:
             result = self.supabase.table('profiles').select(
-                'profile_embedding_v2'
+                'profile_embedding'
             ).eq('user_id', user_id).single().execute()
             
-            embedding_str = result.data['profile_embedding_v2']
+            embedding_str = result.data['profile_embedding']
             if not embedding_str:
                 return None
             
@@ -342,7 +407,7 @@ class ProfileEmbeddingService:
             embedding_vector = f"[{','.join(map(str, user_embedding))}]"
             
             # Use Supabase RPC function for vector similarity search
-            result = self.supabase.rpc('find_similar_profiles_v2', {
+            result = self.supabase.rpc('find_similar_profiles', {
                 'query_embedding': embedding_vector,
                 'exclude_user_id': user_id,
                 'match_limit': limit
@@ -355,28 +420,39 @@ class ProfileEmbeddingService:
             return []
     
     async def _calculate_compatibility(self, user_a_id: str, user_b_id: str) -> Dict[str, float]:
-        """Calculate detailed compatibility score between two users"""
+        """
+        Calculate detailed compatibility score between two users
+        Hybrid algorithm: Static questions (70%) + Importance bonus (20%) + Azure embeddings (10%)
+        Prioritizes concrete question matches over semantic similarity
+        """
         try:
-            # Get embeddings for both users
+            # 1. Get embeddings for both users (Azure OpenAI similarity)
             embedding_a = await self._get_user_embedding(user_a_id)
             embedding_b = await self._get_user_embedding(user_b_id)
             
             if not embedding_a or not embedding_b:
-                return {'total_score': 0.0, 'similarity_score': 0.0, 'cultural_bonus': 0.0}
+                return {'total_score': 0.0, 'embedding_score': 0.0, 'static_score': 0.0, 'importance_bonus': 0.0}
             
-            # Calculate cosine similarity
-            similarity = cosine_similarity([embedding_a], [embedding_b])[0][0]
+            # 2. Calculate static question matching score (70% weight) - PRIORITIZED
+            static_score = await self._calculate_static_question_score(user_a_id, user_b_id) * 0.7
             
-            # Cultural bonus based on answer compatibility (simple version)
-            cultural_bonus = await self._calculate_cultural_bonus(user_a_id, user_b_id)
+            # 3. Calculate importance bonus (20% weight) - Dealbreakers matter
+            importance_bonus = await self._calculate_importance_bonus(user_a_id, user_b_id) * 0.2
             
-            # Final compatibility score (weighted)
-            total_score = (similarity * 0.8) + (cultural_bonus * 0.2)
+            # 4. Calculate Azure embedding similarity (10% weight) - Supplementary
+            embedding_similarity = cosine_similarity([embedding_a], [embedding_b])[0][0]
+            embedding_score = float(embedding_similarity) * 0.1
+            
+            # 5. Combine all scores (Hybrid Algorithm)
+            total_score = static_score + importance_bonus + embedding_score
             
             return {
                 'total_score': min(max(total_score, 0.0), 1.0),  # Clamp between 0-1
-                'similarity_score': similarity,
-                'cultural_bonus': cultural_bonus
+                'embedding_score': embedding_score,
+                'static_score': static_score,
+                'importance_bonus': importance_bonus,
+                'similarity_score': float(embedding_similarity),
+                'cultural_bonus': 0.0
             }
             
         except Exception as e:
@@ -411,6 +487,582 @@ class ProfileEmbeddingService:
         except Exception as e:
             logger.error(f"Cultural bonus calculation failed: {e}")
             return 0.0
+    
+    async def _calculate_static_question_score(self, user_a_id: str, user_b_id: str) -> float:
+        """
+        Calculate compatibility based on static choice question matching only
+        Excludes text questions (which are used for embedding similarity instead)
+        """
+        try:
+            # Text questions that should be excluded from static matching
+            text_question_ids = {
+                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'future_life_vision',
+                'conflict_growth_philosophy', 'life_philosophy_happiness'
+            }
+            
+            answers_a = await self._fetch_user_answers(user_a_id)
+            answers_b = await self._fetch_user_answers(user_b_id)
+            
+            matching_score = 0.0
+            total_questions = 0
+            
+            # Compare only choice questions (exclude text questions)
+            for question_id in answers_a.keys():
+                # Skip text questions - they're used for embedding similarity
+                if question_id in text_question_ids:
+                    continue
+                    
+                if question_id in answers_b:
+                    # Exact match gets full points
+                    if answers_a[question_id] == answers_b[question_id]:
+                        matching_score += 1.0
+                    # Partial match for similar answers
+                    elif answers_a[question_id] and answers_b[question_id]:
+                        # Simple similarity check
+                        matching_score += 0.5
+                    total_questions += 1
+            
+            logger.info(f"Static question score: {matching_score}/{total_questions} = {matching_score/total_questions if total_questions > 0 else 0:.1%}")
+            return matching_score / total_questions if total_questions > 0 else 0.0
+            
+        except Exception as e:
+            logger.error(f"Static score calculation failed: {e}")
+            return 0.0
+    
+    async def _get_dealbreakers(self, user_id: str) -> Dict[str, str]:
+        """Get user's dealbreaker questions and their required answers"""
+        try:
+            result = self.supabase.table('user_answers').select(
+                'question_id, answer_value, answer_text'
+            ).eq('user_id', user_id).eq('is_dealbreaker', True).execute()
+            
+            dealbreakers = {}
+            for item in result.data:
+                question_id = item['question_id']
+                answer = item.get('answer_text') or item.get('answer_value')
+                dealbreakers[question_id] = answer
+            
+            return dealbreakers
+            
+        except Exception as e:
+            logger.error(f"Failed to get dealbreakers for user {user_id}: {e}")
+            return {}
+    
+    async def _check_dealbreaker_compatibility(self, user_a_id: str, user_b_id: str, user_a_dealbreakers: Dict[str, str]) -> bool:
+        """
+        Check if two users are compatible based on dealbreakers
+        Returns True if compatible, False if any dealbreaker is violated
+        """
+        try:
+            if not user_a_dealbreakers:
+                return True  # No dealbreakers, all matches are compatible
+            
+            # Get user B's answers for dealbreaker questions
+            result_b = self.supabase.table('user_answers').select(
+                'question_id, answer_value, answer_text'
+            ).eq('user_id', user_b_id).execute()
+            
+            answers_b = {item['question_id']: (item.get('answer_text') or item.get('answer_value')) for item in result_b.data}
+            
+            # Get user B's profile for gender check
+            profile_b = self.supabase.table('profiles').select('gender').eq('user_id', user_b_id).execute()
+            user_b_gender = profile_b.data[0]['gender'] if profile_b.data else None
+            
+            # Check each dealbreaker
+            for question_id, required_answer in user_a_dealbreakers.items():
+                # Special handling for gender_preference dealbreaker
+                if question_id == 'gender_preference':
+                    if required_answer in ['male', 'female'] and user_b_gender != required_answer:
+                        logger.info(f"Dealbreaker violated: gender_preference requires {required_answer}, but user B is {user_b_gender}")
+                        return False
+                    continue
+                
+                # Check if user B has answered this question
+                if question_id not in answers_b:
+                    logger.info(f"Dealbreaker violated: user B has not answered {question_id}")
+                    return False
+                
+                user_b_answer = answers_b[question_id]
+                
+                # Special handling for disability_acceptance
+                if question_id == 'disability_acceptance':
+                    # If user A requires open acceptance, check if user B is open
+                    if required_answer in ['열린 마음이에요', 'fully_open']:
+                        if user_b_answer not in ['열린 마음이에요', 'fully_open']:
+                            logger.info(f"Dealbreaker violated: disability_acceptance requires open mind, but user B answered {user_b_answer}")
+                            return False
+                    continue
+                
+                # For other dealbreakers, require exact match
+                if required_answer != user_b_answer:
+                    logger.info(f"Dealbreaker violated: {question_id} requires '{required_answer}', but user B answered '{user_b_answer}'")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Dealbreaker compatibility check failed: {e}")
+            return True  # On error, don't filter out (fail open)
+    
+    async def _calculate_importance_bonus(self, user_a_id: str, user_b_id: str) -> float:
+        """Calculate bonus based on matching important/dealbreaker questions"""
+        try:
+            # Get user answers with importance levels
+            result_a = self.supabase.table('user_answers').select(
+                'question_id, answer_value, answer_text, importance, is_dealbreaker'
+            ).eq('user_id', user_a_id).execute()
+            
+            result_b = self.supabase.table('user_answers').select(
+                'question_id, answer_value, answer_text, importance, is_dealbreaker'
+            ).eq('user_id', user_b_id).execute()
+            
+            answers_a = {item['question_id']: item for item in result_a.data}
+            answers_b = {item['question_id']: item for item in result_b.data}
+            
+            importance_score = 0.0
+            total_important = 0
+            
+            for question_id in answers_a.keys():
+                if question_id in answers_b:
+                    answer_a = answers_a[question_id]
+                    answer_b = answers_b[question_id]
+                    
+                    # Check if either marked as important
+                    if answer_a.get('importance', 0) >= 4 or answer_b.get('importance', 0) >= 4:
+                        # Check if answers match
+                        value_a = answer_a.get('answer_text') or answer_a.get('answer_value')
+                        value_b = answer_b.get('answer_text') or answer_b.get('answer_value')
+                        
+                        if value_a == value_b:
+                            importance_score += 1.0
+                        total_important += 1
+            
+            return importance_score / total_important if total_important > 0 else 0.0
+            
+        except Exception as e:
+            logger.error(f"Importance bonus calculation failed: {e}")
+            return 0.0
+    
+    async def _fetch_user_answers_with_metadata(self, user_id: str) -> Dict[str, Dict]:
+        """Fetch user answers with question metadata for categorization"""
+        try:
+            # Get answers with question metadata
+            result = self.supabase.table('user_answers').select(
+                'question_id, answer_value, answer_text, importance, is_dealbreaker'
+            ).eq('user_id', user_id).execute()
+            
+            # Get question categories and types
+            questions_result = self.supabase.table('questions').select(
+                'id, category, answer_type, options'
+            ).execute()
+            
+            questions_meta = {q['id']: q for q in questions_result.data}
+            
+            answers_with_meta = {}
+            for item in result.data:
+                qid = item['question_id']
+                answers_with_meta[qid] = {
+                    'answer_text': item['answer_text'],
+                    'answer_value': item['answer_value'],
+                    'importance': item.get('importance', 3),
+                    'is_dealbreaker': item.get('is_dealbreaker', False),
+                    'category': questions_meta.get(qid, {}).get('category', ''),
+                    'answer_type': questions_meta.get(qid, {}).get('answer_type', 'choice'),
+                    'options': questions_meta.get(qid, {}).get('options', [])
+                }
+            
+            return answers_with_meta
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch user answers with metadata for {user_id}: {e}")
+            return {}
+    
+    async def _generate_statistical_analysis(self, user_a_answers: Dict, user_b_answers: Dict, 
+                                           user_a_info: Dict, user_b_info: Dict) -> Dict:
+        """Generate statistical analysis for static questions with graphs and insights"""
+        try:
+            # Categorize questions for analysis
+            categories = {
+                '결혼계획': [],  # Marriage plans
+                '가치관': [],    # Values  
+                '생활방식': [],  # Lifestyle
+                '갈등해결': [],  # Conflict resolution
+                '감정지원': [],  # Emotional support
+            }
+            
+            # Group matching/mismatching questions by category
+            for qid in user_a_answers.keys():
+                if qid in user_b_answers and user_a_answers[qid]['answer_type'] == 'choice':
+                    category = user_a_answers[qid]['category']
+                    value_a = user_a_answers[qid]['answer_text'] or user_a_answers[qid]['answer_value']
+                    value_b = user_b_answers[qid]['answer_text'] or user_b_answers[qid]['answer_value']
+                    
+                    match_status = 'match' if value_a == value_b else 'mismatch'
+                    importance = max(user_a_answers[qid]['importance'], user_b_answers[qid]['importance'])
+                    
+                    question_analysis = {
+                        'question_id': qid,
+                        'match_status': match_status,
+                        'importance': importance,
+                        'user_a_answer': value_a,
+                        'user_b_answer': value_b
+                    }
+                    
+                    if category in categories:
+                        categories[category].append(question_analysis)
+                    else:
+                        # Default category for unmapped questions
+                        if '기타' not in categories:
+                            categories['기타'] = []
+                        categories['기타'].append(question_analysis)
+            
+            # Calculate category compatibility percentages
+            category_stats = {}
+            for category, questions in categories.items():
+                if questions:
+                    matches = sum(1 for q in questions if q['match_status'] == 'match')
+                    total = len(questions)
+                    percentage = (matches / total) * 100
+                    
+                    category_stats[category] = {
+                        'match_percentage': percentage,
+                        'total_questions': total,
+                        'matching_questions': matches,
+                        'high_importance_matches': sum(1 for q in questions 
+                                                     if q['match_status'] == 'match' and q['importance'] >= 4)
+                    }
+            
+            # Generate insights based on statistical patterns
+            insights = self._generate_statistical_insights(category_stats, user_a_info, user_b_info)
+            
+            # Generate conversation starters based on matches
+            conversation_starters = self._generate_conversation_starters_from_stats(categories)
+            
+            # Create summary
+            overall_compatibility = sum(stats['match_percentage'] for stats in category_stats.values()) / len(category_stats) if category_stats else 0
+            
+            user_a_name = user_a_info.get('nickname', '첫 번째 분')
+            user_b_name = user_b_info.get('nickname', '두 번째 분')
+            
+            summary = f"{user_a_name}님과 {user_b_name}님의 전체 호환성은 {overall_compatibility:.0f}%입니다. " \
+                     f"특히 {max(category_stats.keys(), key=lambda k: category_stats[k]['match_percentage']) if category_stats else '알 수 없는'} 영역에서 매우 잘 맞으십니다."
+            
+            return {
+                'summary': summary,
+                'insights': insights,
+                'graphs': category_stats,  # Frontend can use this to create visual charts
+                'conversation_starters': conversation_starters
+            }
+            
+        except Exception as e:
+            logger.error(f"Statistical analysis generation failed: {e}")
+            return {
+                'summary': '통계 분석을 생성할 수 없습니다.',
+                'insights': [],
+                'graphs': {},
+                'conversation_starters': []
+            }
+    
+    def _generate_statistical_insights(self, category_stats: Dict, user_a_info: Dict, user_b_info: Dict) -> List[str]:
+        """Generate insights based on statistical analysis"""
+        insights = []
+        user_a_name = user_a_info.get('nickname', '첫 번째 분')
+        user_b_name = user_b_info.get('nickname', '두 번째 분')
+        
+        # Find strongest and weakest compatibility areas
+        if category_stats:
+            sorted_categories = sorted(category_stats.items(), key=lambda x: x[1]['match_percentage'], reverse=True)
+            
+            # Strongest area
+            strongest_category, strongest_stats = sorted_categories[0]
+            insights.append(f"가장 잘 맞는 영역: {strongest_category} ({strongest_stats['match_percentage']:.0f}% 일치)")
+            
+            # Areas for growth
+            if len(sorted_categories) > 1:
+                weakest_category, weakest_stats = sorted_categories[-1]
+                if weakest_stats['match_percentage'] < 70:
+                    insights.append(f"함께 성장할 영역: {weakest_category}에서 서로 다른 관점을 나누며 더 깊이 이해할 수 있습니다")
+            
+            # High importance matches
+            high_importance_total = sum(stats['high_importance_matches'] for stats in category_stats.values())
+            if high_importance_total > 0:
+                insights.append(f"중요하게 생각하는 가치관에서 {high_importance_total}개 항목이 일치합니다")
+        
+        return insights
+    
+    def _generate_conversation_starters_from_stats(self, categories: Dict) -> List[str]:
+        """Generate conversation starters based on matching answers"""
+        starters = []
+        
+        # Find interesting matches to discuss
+        for category, questions in categories.items():
+            matches = [q for q in questions if q['match_status'] == 'match' and q['importance'] >= 3]
+            
+            if matches and category == '결혼계획':
+                starters.append("두 분 모두 비슷한 결혼 계획을 가지고 계시네요. 구체적으로 어떤 가정을 꿈꾸시는지 이야기해보세요")
+            elif matches and category == '생활방식':
+                starters.append("라이프스타일이 잘 맞으시는 것 같아요. 함께 하고 싶은 취미나 활동이 있을까요?")
+            elif matches and category == '가치관':
+                starters.append("중요하게 생각하는 가치관이 비슷하시네요. 이런 가치관을 어떻게 키워오셨는지 궁금해요")
+        
+        # Add default starters if none generated
+        if not starters:
+            starters = [
+                "서로의 일상에 대해 더 자세히 이야기해보세요",
+                "앞으로의 꿈이나 목표에 대해 대화해보시면 좋을 것 같아요",
+                "취미나 관심사를 공유해보세요"
+            ]
+        
+        return starters[:3]  # Return top 3
+    
+    async def _generate_ai_explanation_for_text_questions(self, user_a_info: Dict, user_b_info: Dict, 
+                                                        user_a_answers: Dict, user_b_answers: Dict,
+                                                        compatibility_score: float) -> Optional[object]:
+        """Generate AI explanation only for open-ended text questions (Q36-40)"""
+        try:
+            # Extract only text questions (Q36-40: personal_values_lifestyle, ideal_relationship_dynamic, 
+            # future_life_vision, conflict_growth_philosophy, life_philosophy_happiness)
+            text_question_ids = [
+                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'future_life_vision',
+                'conflict_growth_philosophy', 'life_philosophy_happiness'
+            ]
+            
+            # Filter to only text questions that both users answered
+            text_answers_a = {qid: ans for qid, ans in user_a_answers.items() 
+                            if qid in text_question_ids and ans['answer_type'] == 'text' 
+                            and (ans['answer_text'] or ans['answer_value'])}
+            text_answers_b = {qid: ans for qid, ans in user_b_answers.items() 
+                            if qid in text_question_ids and ans['answer_type'] == 'text'
+                            and (ans['answer_text'] or ans['answer_value'])}
+            
+            # Only generate AI explanation if both users have answered text questions
+            common_text_questions = set(text_answers_a.keys()) & set(text_answers_b.keys())
+            
+            if not common_text_questions:
+                logger.info("No common text questions found, skipping AI explanation")
+                return None
+            
+            # Prepare text answers for AI analysis
+            formatted_text_answers_a = {}
+            formatted_text_answers_b = {}
+            
+            for qid in common_text_questions:
+                formatted_text_answers_a[qid] = text_answers_a[qid]['answer_text'] or text_answers_a[qid]['answer_value']
+                formatted_text_answers_b[qid] = text_answers_b[qid]['answer_text'] or text_answers_b[qid]['answer_value']
+            
+            # Generate AI explanation using Azure OpenAI (only for text questions)
+            explanation = await azure_openai_service.generate_match_explanation(
+                user_a_profile=user_a_info,
+                user_b_profile=user_b_info,
+                compatibility_score=compatibility_score,
+                user_a_answers=formatted_text_answers_a,
+                user_b_answers=formatted_text_answers_b
+            )
+            
+            logger.info(f"Generated AI explanation for {len(common_text_questions)} text questions")
+            return explanation
+            
+        except Exception as e:
+            logger.error(f"AI explanation generation failed: {e}")
+            return None
+    
+    def _safe_serialize_ai_explanation(self, ai_explanation) -> Optional[Dict]:
+        """Safely serialize AI explanation object to avoid serialization errors"""
+        if not ai_explanation:
+            return None
+        
+        try:
+            # Try .dict() method first (Pydantic models)
+            if hasattr(ai_explanation, 'dict'):
+                return ai_explanation.dict()
+            
+            # Try .__dict__ attribute
+            elif hasattr(ai_explanation, '__dict__'):
+                return ai_explanation.__dict__
+            
+            # If it's already a dict
+            elif isinstance(ai_explanation, dict):
+                return ai_explanation
+            
+            # Last resort: convert to string
+            else:
+                logger.warning(f"Unknown AI explanation type: {type(ai_explanation)}, converting to string")
+                return {"raw_content": str(ai_explanation)}
+                
+        except Exception as e:
+            logger.error(f"Failed to serialize AI explanation: {e}")
+            return {"error": "Failed to serialize AI explanation", "type": str(type(ai_explanation))}
+    
+    async def _generate_personalized_matching_explanation(self, user_a_answers: Dict, user_b_answers: Dict,
+                                                        user_a_info: Dict, user_b_info: Dict, 
+                                                        compatibility_score: float) -> Dict:
+        """Generate personalized explanation showing each person's personality and why they match"""
+        try:
+            user_a_name = user_a_info.get('nickname', '첫 번째 분')
+            user_b_name = user_b_info.get('nickname', '두 번째 분')
+            
+            # Analyze User A's personality traits
+            user_a_traits = self._analyze_personality_traits(user_a_answers)
+            user_b_traits = self._analyze_personality_traits(user_b_answers)
+            
+            # Find matching personality aspects
+            matching_traits = self._find_matching_personality_aspects(user_a_answers, user_b_answers, user_a_traits, user_b_traits)
+            
+            # Find complementary differences
+            complementary_differences = self._find_complementary_differences(user_a_answers, user_b_answers, user_a_traits, user_b_traits)
+            
+            return {
+                "user_a_personality": {
+                    "name": user_a_name,
+                    "key_traits": user_a_traits,
+                    "description": f"{user_a_name}님은 {', '.join(user_a_traits[:3])}한 성향을 보여주시네요."
+                },
+                "user_b_personality": {
+                    "name": user_b_name,
+                    "key_traits": user_b_traits,
+                    "description": f"{user_b_name}님은 {', '.join(user_b_traits[:3])}한 성향을 보여주시네요."
+                },
+                "why_you_match": matching_traits,
+                "complementary_strengths": complementary_differences,
+                "match_summary": f"{user_a_name}님과 {user_b_name}님은 {len(matching_traits)}개의 공통된 가치관을 가지고 있으며, " + 
+                               f"서로 다른 강점으로 균형을 이룰 수 있는 관계입니다."
+            }
+            
+        except Exception as e:
+            logger.error(f"Personalized explanation generation failed: {e}")
+            return {
+                "user_a_personality": {"name": "알 수 없음", "key_traits": [], "description": ""},
+                "user_b_personality": {"name": "알 수 없음", "key_traits": [], "description": ""},
+                "why_you_match": [],
+                "complementary_strengths": [],
+                "match_summary": "개인화된 분석을 생성할 수 없습니다."
+            }
+    
+    def _analyze_personality_traits(self, user_answers: Dict) -> List[str]:
+        """Analyze personality traits from user answers"""
+        traits = []
+        
+        for qid, answer_data in user_answers.items():
+            if answer_data['answer_type'] != 'choice':
+                continue
+                
+            answer = answer_data['answer_text'] or answer_data['answer_value']
+            
+            # Marriage and commitment
+            if qid == 'marriage_timeline':
+                if 'within_1_year' in answer or '1년 이내' in answer:
+                    traits.append("결혼에 적극적")
+                elif 'not_decided' in answer or '생각 중' in answer:
+                    traits.append("신중한 결정을 선호")
+            
+            # Communication style
+            elif qid == 'conflict_resolution':
+                if 'calm_discussion' in answer or '진정시킨 후' in answer:
+                    traits.append("차분하고 이성적")
+                elif 'immediate_talk' in answer or '바로 대화' in answer:
+                    traits.append("솔직하고 직접적")
+            
+            # Lifestyle
+            elif qid == 'exercise_habits':
+                if 'daily' in answer or '매일' in answer:
+                    traits.append("활동적이고 건강지향적")
+                elif 'regular' in answer or '3-4회' in answer:
+                    traits.append("규칙적인 생활을 추구")
+            
+            # Social preferences
+            elif qid == 'social_life_balance':
+                if 'weekly' in answer or '주 1회' in answer:
+                    traits.append("사교적")
+                elif 'rarely' in answer or '거의 안' in answer:
+                    traits.append("집에서 시간 보내기를 좋아함")
+            
+            # Career attitudes
+            elif qid == 'career_priority':
+                if 'family_first' in answer or '가정을 우선' in answer:
+                    traits.append("가정을 중시하는")
+                elif 'balanced' in answer or '균형' in answer:
+                    traits.append("일과 삶의 균형을 추구")
+            
+            # Love language
+            elif qid == 'love_language':
+                if 'words' in answer or '말을 들을 때' in answer:
+                    traits.append("언어적 표현을 중시")
+                elif 'quality_time' in answer or '함께 시간' in answer:
+                    traits.append("함께하는 시간을 소중히 여기는")
+        
+        # Return unique traits, limit to top 5
+        return list(set(traits))[:5]
+    
+    def _find_matching_personality_aspects(self, user_a_answers: Dict, user_b_answers: Dict, 
+                                         user_a_traits: List[str], user_b_traits: List[str]) -> List[str]:
+        """Find why these two personalities match well"""
+        matching_reasons = []
+        
+        # Check for exact matching traits
+        common_traits = set(user_a_traits) & set(user_b_traits)
+        for trait in common_traits:
+            matching_reasons.append(f"두 분 모두 {trait}한 성향으로 서로를 이해할 수 있습니다")
+        
+        # Check for matching answers on key questions
+        key_questions = ['marriage_timeline', 'children_plan', 'career_priority', 'conflict_resolution']
+        
+        for qid in key_questions:
+            if (qid in user_a_answers and qid in user_b_answers and 
+                user_a_answers[qid]['answer_type'] == 'choice'):
+                
+                answer_a = user_a_answers[qid]['answer_text'] or user_a_answers[qid]['answer_value']
+                answer_b = user_b_answers[qid]['answer_text'] or user_b_answers[qid]['answer_value']
+                
+                if answer_a == answer_b:
+                    if qid == 'marriage_timeline':
+                        matching_reasons.append("결혼에 대한 생각과 계획이 비슷합니다")
+                    elif qid == 'children_plan':
+                        matching_reasons.append("자녀에 대한 계획이 일치합니다")
+                    elif qid == 'career_priority':
+                        matching_reasons.append("일과 가정에 대한 우선순위가 같습니다")
+                    elif qid == 'conflict_resolution':
+                        matching_reasons.append("갈등을 해결하는 방식이 비슷합니다")
+        
+        return matching_reasons[:4]  # Return top 4 matching aspects
+    
+    def _find_complementary_differences(self, user_a_answers: Dict, user_b_answers: Dict,
+                                      user_a_traits: List[str], user_b_traits: List[str]) -> List[str]:
+        """Find complementary differences that strengthen the relationship"""
+        complementary = []
+        
+        # Look for complementary personality patterns
+        if any('사교적' in trait for trait in user_a_traits) and any('집에서' in trait for trait in user_b_traits):
+            complementary.append("한 분은 사교적이고 다른 분은 차분해서 서로에게 균형을 줄 수 있습니다")
+        
+        if any('활동적' in trait for trait in user_a_traits) and any('규칙적' in trait for trait in user_b_traits):
+            complementary.append("활동적인 에너지와 안정적인 계획성이 잘 어우러질 것 같습니다")
+        
+        # Check for complementary answers
+        complementary_pairs = {
+            'introvert_extrovert': {
+                'extrovert': 'introvert',
+                'introvert': 'extrovert'
+            }
+        }
+        
+        for qid, pairs in complementary_pairs.items():
+            if (qid in user_a_answers and qid in user_b_answers):
+                answer_a = user_a_answers[qid]['answer_text'] or user_a_answers[qid]['answer_value']
+                answer_b = user_b_answers[qid]['answer_text'] or user_b_answers[qid]['answer_value']
+                
+                for key, complement in pairs.items():
+                    if key in answer_a and complement in answer_b:
+                        complementary.append("서로 다른 성격으로 균형잡힌 관계를 만들 수 있습니다")
+                        break
+        
+        # If no complementary differences found, add positive generic ones
+        if not complementary:
+            complementary = [
+                "서로 다른 강점으로 함께 성장할 수 있는 관계입니다",
+                "각자의 특별함이 관계에 다양성을 더할 것입니다"
+            ]
+        
+        return complementary[:3]  # Return top 3 complementary aspects
     
     async def _fetch_user_profile_summary(self, user_id: str) -> Dict:
         """Fetch user profile summary using RPC function"""
