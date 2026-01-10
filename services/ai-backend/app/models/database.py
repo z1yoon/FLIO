@@ -25,7 +25,9 @@ def get_supabase_client() -> Client:
         # For backend operations, use the secret key (new naming convention)
         supabase_key = os.getenv("SUPABASE_SECRET_KEY")
         
-        logger.info("Initializing Supabase connection")
+        # Debug logging
+        logger.info(f"Initializing Supabase with URL: {supabase_url}")
+        logger.info(f"Using secret key: {supabase_key[:20]}..." if supabase_key else "No key found")
         
         if not supabase_url:
             raise ValueError("SUPABASE_URL environment variable not found")

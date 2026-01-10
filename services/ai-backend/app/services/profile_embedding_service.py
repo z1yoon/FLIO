@@ -281,6 +281,17 @@ class ProfileEmbeddingService:
                 compatibility['total_score'], reshuffle_preference, reshuffle_context
             )
             
+            # Debug logging
+            if ai_explanation:
+                logger.info(f"AI explanation type: {type(ai_explanation)}")
+                logger.info(f"AI explanation attributes: {dir(ai_explanation) if hasattr(ai_explanation, '__dict__') else 'No __dict__'}")
+                if hasattr(ai_explanation, '__dict__'):
+                    logger.info(f"AI explanation dict: {ai_explanation.__dict__}")
+                elif hasattr(ai_explanation, 'dict'):
+                    try:
+                        logger.info(f"AI explanation dict(): {ai_explanation.dict()}")
+                    except Exception as e:
+                        logger.error(f"Error calling dict(): {e}")
             
             # Generate personalized matching explanations
             personalized_explanation = await self._generate_personalized_matching_explanation(
