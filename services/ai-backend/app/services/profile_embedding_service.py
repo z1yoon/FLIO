@@ -522,8 +522,8 @@ class ProfileEmbeddingService:
         Only 4 questions can be dealbreakers (hard filters):
         1. gender_preference - 선호하는 상대방 성별
         2. disability_acceptance - 신체적 차이 유무
-        3. sexual_orientation - 성적 지향
-        4. (Reserved for future: age_range or divorce_status)
+        3. divorce_status - 상대방 이혼 유무
+        4. age_range_preference - 상대방 나이 연령대
         
         All other questions use importance ratings (1-5) for scoring bonus
         """
