@@ -6,7 +6,7 @@ Uses translation to English for cost optimization
 
 import asyncio
 import json
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from pydantic import BaseModel
 import logging
 
