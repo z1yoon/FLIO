@@ -516,7 +516,17 @@ class ProfileEmbeddingService:
             return 0.0
     
     async def _get_dealbreakers(self, user_id: str) -> Dict[str, str]:
-        """Get user's dealbreaker questions and their required answers"""
+        """
+        Get user's dealbreaker questions and their required answers
+        
+        Only 4 questions can be dealbreakers (hard filters):
+        1. gender_preference - 선호하는 상대방 성별
+        2. disability_acceptance - 신체적 차이 유무
+        3. sexual_orientation - 성적 지향
+        4. (Reserved for future: age_range or divorce_status)
+        
+        All other questions use importance ratings (1-5) for scoring bonus
+        """
         try:
             result = self.supabase.table('user_answers').select(
                 'question_id, answer_value, answer_text'
@@ -591,7 +601,11 @@ class ProfileEmbeddingService:
             return True  # On error, don't filter out (fail open)
     
     async def _calculate_importance_bonus(self, user_a_id: str, user_b_id: str) -> float:
-        """Calculate bonus based on matching important/dealbreaker questions"""
+        """
+        Calculate bonus based on matching important questions (importance >= 4)
+        This applies to all 35 static questions (not just dealbreakers)
+        Gives extra weight when both users marked a question as important AND have matching answers
+        """
         try:
             # Get user answers with importance levels
             result_a = self.supabase.table('user_answers').select(
