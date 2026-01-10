@@ -47,101 +47,43 @@ class ProfileEmbeddingService:
     
     async def build_profile_text(self, user_answers: Dict[str, str]) -> str:
         """
-        Build Korean narrative text from user answers for embedding generation
-        This text represents the user's personality, values, and preferences
+        Build text from ONLY the 5 open-ended questions for embedding generation
+        Static choice questions (Q1-35) are handled by exact matching, not embeddings
+        Only text questions (Q36-40) need semantic similarity via embeddings
         """
-        profile_sections = []
+        # Only include the 5 open-ended text questions
+        text_question_ids = [
+            'personal_values_lifestyle',      # Q36: 가치관과 라이프스타일
+            'ideal_relationship_dynamic',     # Q37: 이상적인 관계 역학
+            'future_life_vision',             # Q38: 미래 삶의 비전
+            'conflict_growth_philosophy',     # Q39: 갈등과 성장 철학
+            'life_philosophy_happiness'       # Q40: 인생 철학과 행복
+        ]
         
-        # MBTI and personality section
-        mbti_answers = {k: v for k, v in user_answers.items() if 'MBTI' in k or '성향' in k}
-        if mbti_answers:
-            personality_text = self._build_personality_section(mbti_answers)
-            profile_sections.append(f"성격 및 성향: {personality_text}")
+        # Extract only text question answers
+        text_answers = []
+        for qid in text_question_ids:
+            if qid in user_answers and user_answers[qid]:
+                answer = user_answers[qid].strip()
+                if answer:  # Only include non-empty answers
+                    text_answers.append(f"{answer}")
         
-        # Values and lifestyle section  
-        value_answers = {k: v for k, v in user_answers.items() if any(word in k for word in ['가치관', '라이프스타일', '취미', '여가'])}
-        if value_answers:
-            values_text = self._build_values_section(value_answers)
-            profile_sections.append(f"가치관과 생활방식: {values_text}")
+        if not text_answers:
+            # If no text answers yet, return a minimal profile
+            # This allows embedding creation even before text questions are answered
+            return "한국인 결혼 대상자 프로필: 프로필 작성 중"
         
-        # Relationship and future plans
-        relationship_answers = {k: v for k, v in user_answers.items() if any(word in k for word in ['결혼', '연애', '가족', '미래'])}
-        if relationship_answers:
-            relationship_text = self._build_relationship_section(relationship_answers)
-            profile_sections.append(f"연애관과 미래계획: {relationship_text}")
-        
-        # Communication and conflict resolution
-        communication_answers = {k: v for k, v in user_answers.items() if any(word in k for word in ['소통', '갈등', '의견', '결정'])}
-        if communication_answers:
-            communication_text = self._build_communication_section(communication_answers)
-            profile_sections.append(f"소통방식과 갈등해결: {communication_text}")
-        
-        # Combine all sections
-        full_profile = " | ".join(profile_sections)
-        
-        # Add context for better embedding
+        # Combine text answers with context
+        full_profile = " | ".join(text_answers)
         contextualized_profile = f"한국인 결혼 대상자 프로필: {full_profile}"
         
         return contextualized_profile
     
-    def _build_personality_section(self, answers: Dict[str, str]) -> str:
-        """Build personality description from MBTI-related answers"""
-        traits = []
-        for question_id, answer in answers.items():
-            # Map answers to personality traits
-            if 'energy' in question_id or '에너지' in question_id:
-                if 'friends' in answer or '친구' in answer:
-                    traits.append("사교적")
-                elif 'alone' in answer or '혼자' in answer:
-                    traits.append("내성적")
-            
-            if 'gathering' in question_id or '모임' in question_id:
-                if 'lead' in answer or '이끈다' in answer:
-                    traits.append("리더십있는")
-                elif 'listen' in answer or '듣기' in answer:
-                    traits.append("경청하는")
-        
-        return ", ".join(traits) if traits else "다양한 성격을 가진"
-    
-    def _build_values_section(self, answers: Dict[str, str]) -> str:
-        """Build values and lifestyle description"""
-        values = []
-        for question_id, answer in answers.items():
-            # Extract key values from answers
-            if 'family' in answer or '가족' in answer:
-                values.append("가족중심적")
-            if 'career' in answer or '커리어' in answer or '직업' in answer:
-                values.append("성취지향적")
-            if 'balance' in answer or '균형' in answer:
-                values.append("균형추구")
-        
-        return ", ".join(values) if values else "다양한 가치관을 가진"
-    
-    def _build_relationship_section(self, answers: Dict[str, str]) -> str:
-        """Build relationship philosophy description"""
-        relationship_style = []
-        for question_id, answer in answers.items():
-            if 'trust' in answer or '신뢰' in answer:
-                relationship_style.append("신뢰중시")
-            if 'communication' in answer or '소통' in answer:
-                relationship_style.append("소통중시")
-            if 'support' in answer or '지지' in answer or '격려' in answer:
-                relationship_style.append("서로격려")
-        
-        return ", ".join(relationship_style) if relationship_style else "진실한 관계를 원하는"
-    
-    def _build_communication_section(self, answers: Dict[str, str]) -> str:
-        """Build communication style description"""
-        comm_style = []
-        for question_id, answer in answers.items():
-            if 'direct' in answer or '직접' in answer or '솔직' in answer:
-                comm_style.append("직접적소통")
-            if 'patient' in answer or '인내' in answer or '기다' in answer:
-                comm_style.append("인내심있는")
-            if 'compromise' in answer or '타협' in answer or '절충' in answer:
-                comm_style.append("타협적")
-        
-        return ", ".join(comm_style) if comm_style else "건강한 소통을 추구하는"
+    # Removed: _build_personality_section, _build_values_section, 
+    # _build_relationship_section, _build_communication_section
+    # These methods extracted keywords from static choice questions,
+    # which is redundant since static questions are exact-matched (60% of score)
+    # Only the 5 open-ended text questions need embedding for semantic similarity
     
     async def create_user_profile_embedding(self, user_id: str) -> UserProfile:
         """
