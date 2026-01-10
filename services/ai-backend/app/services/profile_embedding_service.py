@@ -1371,14 +1371,15 @@ class ProfileEmbeddingService:
             return {}
 
 # Singleton instance
-    async def store_reshuffle_feedback(self, user_id: str, preference_text: str):
-        """Store user's reshuffle preference for future analysis"""
+    async def store_reshuffle_feedback(self, user_id: str, preference_text: str, rejected_match_ids: List[str] = None):
+        """Store user's reshuffle preference and rejected matches for future analysis"""
         try:
             result = self.supabase.table('reshuffle_feedback').insert({
                 'user_id': user_id,
-                'preference_text': preference_text
+                'preference_text': preference_text,
+                'rejected_match_ids': rejected_match_ids or []
             }).execute()
-            logger.info(f"Stored reshuffle feedback for user {user_id}")
+            logger.info(f"Stored reshuffle feedback for user {user_id} with {len(rejected_match_ids or [])} rejected matches")
             return result.data
         except Exception as e:
             logger.warning(f"Reshuffle feedback storage not available: {e}")
@@ -1403,36 +1404,48 @@ class ProfileEmbeddingService:
         user_id: str, 
         preference: str,
         reshuffle_context: List[Dict],
-        limit: int = 10
+        limit: int = 10,
+        excluded_match_ids: List[str] = None
     ) -> List[MatchResult]:
         """
         Find matches with user preference context
         Uses AI to analyze preference and adjust matching to find different matches
+        Excludes previously shown matches to ensure new people
         Optimized to reduce API calls
         """
         try:
-            logger.info(f"Finding preference-based matches for user {user_id} with preference: {preference}")
+            excluded_ids = set(excluded_match_ids or [])
+            logger.info(f"Finding preference-based matches for user {user_id} with preference: {preference}, excluding {len(excluded_ids)} previous matches")
             
-            # 1. Get potential matches (limit * 2 instead of * 3 to reduce API calls)
-            all_matches = await self.find_compatible_matches(user_id, limit * 2)
+            # 1. Get more potential matches to account for exclusions
+            fetch_limit = limit * 3 if excluded_ids else limit * 2
+            all_matches = await self.find_compatible_matches(user_id, fetch_limit)
             
             if not all_matches:
                 logger.warning("No matches found, returning empty list")
                 return []
             
-            # 2. Analyze user preference to extract matching criteria (uses cache if available)
+            # 2. Filter out excluded matches immediately
+            if excluded_ids:
+                all_matches = [m for m in all_matches if m.user_id not in excluded_ids]
+                logger.info(f"After excluding previous matches: {len(all_matches)} candidates remaining")
+            
+            if not all_matches:
+                logger.warning("All matches were excluded, returning empty list")
+                return []
+            
+            # 3. Analyze user preference to extract matching criteria (uses cache if available)
             preference_criteria = await self._analyze_preference_criteria(preference)
             logger.info(f"Extracted preference criteria: {preference_criteria}")
             
-            # 3. Filter and re-rank matches based on preference criteria
-            # This will fetch user answers once per match candidate
+            # 4. Filter and re-rank matches based on preference criteria
             preference_filtered_matches = await self._filter_matches_by_preference(
                 user_id, all_matches, preference_criteria, preference
             )
             
-            # 4. Return top matches prioritizing high-preference matches
+            # 5. Return top matches prioritizing high-preference matches
             final_matches = preference_filtered_matches[:limit]
-            logger.info(f"Returning {len(final_matches)} preference-filtered matches")
+            logger.info(f"Returning {len(final_matches)} NEW preference-filtered matches")
             
             return final_matches
             

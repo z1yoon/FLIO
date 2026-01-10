@@ -198,6 +198,7 @@ class ReshuffleRequest(BaseModel):
     preference: str
     limit: int = 10
     min_compatibility: float = 0.3
+    rejected_match_ids: List[str] = []  # IDs of matches to exclude
 
 
 @router.post("/reshuffle-matches", response_model=MatchesResponse)
@@ -217,19 +218,20 @@ async def reshuffle_matches_with_preference(request: ReshuffleRequest):
         # Store reshuffle feedback in database for future analysis
         await profile_embedding_service.store_reshuffle_feedback(
             request.user_id,
-            request.preference
+            request.preference,
+            request.rejected_match_ids
         )
         
         # Get user's reshuffle history for context
         reshuffle_context = await profile_embedding_service.get_reshuffle_context(request.user_id)
         
-        # Find matches with preference context
-        # This will be used to adjust matching and generate better explanations
+        # Find matches with preference context, excluding previously shown matches
         match_results = await profile_embedding_service.find_compatible_matches_with_preference(
             request.user_id,
             request.preference,
             reshuffle_context,
-            request.limit * 2
+            request.limit * 2,
+            request.rejected_match_ids
         )
         
         # Filter by minimum compatibility

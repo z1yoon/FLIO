@@ -352,7 +352,8 @@ class AIQuestionService {
     userId: string,
     preference: string,
     limit: number = 10,
-    minCompatibility: number = 0.3
+    minCompatibility: number = 0.3,
+    rejectedMatchIds: string[] = []
   ): Promise<{
     matches: MatchResult[];
     total_found: number;
@@ -369,7 +370,8 @@ class AIQuestionService {
         user_id: userId,
         preference: preference,
         limit,
-        min_compatibility: minCompatibility
+        min_compatibility: minCompatibility,
+        rejected_match_ids: rejectedMatchIds
       })
     });
     
