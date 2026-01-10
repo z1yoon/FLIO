@@ -510,10 +510,30 @@ class AIQuestionService {
         };
       }
       
-      return { answered: 0, total: 40, percentage: 0 };
+      // Fallback: fetch total from backend if profile unavailable
+      try {
+        const statsResponse = await fetch(`${this.baseUrl}/questions/stats`);
+        if (statsResponse.ok) {
+          const stats = await statsResponse.json();
+          return { answered: 0, total: stats.total_questions, percentage: 0 };
+        }
+      } catch (statsError) {
+        console.error('Failed to fetch question stats:', statsError);
+      }
+      return { answered: 0, total: 44, percentage: 0 }; // Updated default to 44
     } catch (error) {
       console.error('Failed to get user progress:', error);
-      return { answered: 0, total: 40, percentage: 0 };
+      // Fallback: try to get total from stats endpoint
+      try {
+        const statsResponse = await fetch(`${this.baseUrl}/questions/stats`);
+        if (statsResponse.ok) {
+          const stats = await statsResponse.json();
+          return { answered: 0, total: stats.total_questions, percentage: 0 };
+        }
+      } catch (statsError) {
+        console.error('Failed to fetch question stats:', statsError);
+      }
+      return { answered: 0, total: 44, percentage: 0 }; // Updated default to 44
     }
   }
 
