@@ -1408,27 +1408,29 @@ class ProfileEmbeddingService:
         """
         Find matches with user preference context
         Uses AI to analyze preference and adjust matching to find different matches
+        Optimized to reduce API calls
         """
         try:
             logger.info(f"Finding preference-based matches for user {user_id} with preference: {preference}")
             
-            # 1. Get all potential matches (more than usual to filter from)
-            all_matches = await self.find_compatible_matches(user_id, limit * 3)
+            # 1. Get potential matches (limit * 2 instead of * 3 to reduce API calls)
+            all_matches = await self.find_compatible_matches(user_id, limit * 2)
             
-            # 2. Analyze user preference to extract matching criteria
+            if not all_matches:
+                logger.warning("No matches found, returning empty list")
+                return []
+            
+            # 2. Analyze user preference to extract matching criteria (uses cache if available)
             preference_criteria = await self._analyze_preference_criteria(preference)
             logger.info(f"Extracted preference criteria: {preference_criteria}")
             
             # 3. Filter and re-rank matches based on preference criteria
+            # This will fetch user answers once per match candidate
             preference_filtered_matches = await self._filter_matches_by_preference(
                 user_id, all_matches, preference_criteria, preference
             )
             
-            # 4. If we don't have enough preference-based matches, add some regular matches
-            if len(preference_filtered_matches) < limit:
-                remaining_matches = [m for m in all_matches if m not in preference_filtered_matches]
-                preference_filtered_matches.extend(remaining_matches[:limit - len(preference_filtered_matches)])
-            
+            # 4. Return top matches prioritizing high-preference matches
             final_matches = preference_filtered_matches[:limit]
             logger.info(f"Returning {len(final_matches)} preference-filtered matches")
             

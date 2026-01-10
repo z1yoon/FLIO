@@ -179,7 +179,17 @@ export default function MatchesScreen() {
       }
       
       console.log(`✨ Found ${improvedMatches.total_found} improved matches based on preference`);
-      setMatches(improvedMatches.matches);
+      
+      // Filter out duplicates - only show new matches that aren't already displayed
+      const currentMatchIds = new Set(matches.map(m => m.user_id));
+      const newMatches = improvedMatches.matches.filter(m => !currentMatchIds.has(m.user_id));
+      
+      if (newMatches.length > 0) {
+        setMatches(newMatches);
+      } else {
+        // If all matches are duplicates, just replace with the new set
+        setMatches(improvedMatches.matches);
+      }
       
       // Clear preference for next time
       setReshufflePreference('');
