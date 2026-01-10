@@ -33,10 +33,7 @@ async def lifespan(app: FastAPI):
         # Initialize Azure OpenAI service
         logger.info("Initializing Azure OpenAI service...")
         services["azure_openai"] = azure_openai_service
-        
-        # Test Azure OpenAI connection
-        test_response = await azure_openai_service.generate_profile_embedding("Test connection")
-        logger.info(f"Azure OpenAI connected - embedding dimension: {len(test_response.embedding)}")
+        logger.info("Azure OpenAI service initialized")
         
         # Initialize Supabase connection
         logger.info("Initializing Supabase connection...")
@@ -150,7 +147,7 @@ async def health_check():
 
 @app.get("/api/v1/system/info")
 async def system_info():
-    """System information for debugging"""
+    """System information"""
     return {
         "environment_variables": {
             "azure_openai_configured": bool(os.getenv("AZURE_OPENAI_ENDPOINT")),

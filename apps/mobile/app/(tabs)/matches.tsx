@@ -61,19 +61,12 @@ export default function MatchesScreen() {
         return;
       }
 
-      console.log('🔄 Loading AI-powered matches...');
-
       // Check if user has profile embedding
       const embeddingStatus = await aiQuestionService.checkEmbeddingStatus(userId);
       
       if (!embeddingStatus.has_embedding) {
-        console.log('⚠️ No profile embedding found - attempting to create it...');
         // Try to create embedding if questions are answered but embedding doesn't exist
-        const createResult = await aiQuestionService.createProfileEmbedding(userId);
-        if (!createResult.success) {
-          console.log('⚠️ AI profile analysis in progress - continuing with available data');
-          // No alert needed - just continue silently with available functionality
-        }
+        await aiQuestionService.createProfileEmbedding(userId);
       }
 
       // Find matches with AI
@@ -84,7 +77,6 @@ export default function MatchesScreen() {
         return;
       }
 
-      console.log(`✅ Found ${matchResults.total_found} AI matches`);
       setMatches(matchResults.matches);
 
     } catch (error) {
@@ -101,8 +93,6 @@ export default function MatchesScreen() {
       setSelectedMatch(match);
       setIsLoadingExplanation(true);
       setShowExplanation(true);
-      
-      console.log(`🔍 Getting AI explanation for match with ${match.user_id}...`);
       
       const userId = currentUserId || await getCurrentUserId();
       if (!userId) {
@@ -131,15 +121,13 @@ export default function MatchesScreen() {
   };
 
   const handleLikeMatch = (match: MatchResult) => {
-    // In production, this would send like to backend
-    console.log(`💕 Liked match: ${match.user_id}`);
+    // TODO: Send like to backend
     FLIOAlertAPI.alert('좋아요! 💕', `${match.name || '회원'}님에게 좋아요를 보냈습니다!`);
   };
 
   const handlePassMatch = (match: MatchResult) => {
     // Remove from current matches
     setMatches(prev => prev.filter(m => m.user_id !== match.user_id));
-    console.log(`👋 Passed on match: ${match.user_id}`);
   };
 
   const closeExplanation = () => {
@@ -157,8 +145,6 @@ export default function MatchesScreen() {
     setShowReshuffleDialog(false);
     
     try {
-      console.log('🔄 AI Reshuffle with preference:', reshufflePreference);
-      
       // Show loading state
       setIsLoading(true);
       
@@ -178,7 +164,6 @@ export default function MatchesScreen() {
         return;
       }
       
-      console.log(`✨ Found ${improvedMatches.total_found} improved matches based on preference`);
       setMatches(improvedMatches.matches);
       
       // Clear preference for next time

@@ -112,7 +112,6 @@ class AIQuestionService {
   
   constructor() {
     this.baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-    console.log('🔗 Connecting to backend at:', this.baseUrl);
   }
 
   /**
@@ -120,7 +119,6 @@ class AIQuestionService {
    * Returns all questions ordered by effectiveness score
    */
   async getInitialQuestions(): Promise<Question[]> {
-    console.log('🔄 Loading initial questions from backend...');
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -140,7 +138,6 @@ class AIQuestionService {
     }
 
     const data = await response.json();
-    console.log('✅ Successfully loaded questions from backend');
     
     return data.questions.map((q: any) => ({
       id: q.id,
@@ -170,7 +167,6 @@ class AIQuestionService {
     needs_followup?: boolean;
     message: string;
   }> {
-    console.log('📤 Submitting answer with AI analysis:', { questionId, answerValue });
     
     const response = await fetch(`${this.baseUrl}/questions/answer`, {
       method: 'POST',
@@ -191,12 +187,6 @@ class AIQuestionService {
     }
 
     const data = await response.json();
-    console.log('✅ Answer submitted successfully');
-    
-    if (data.analysis) {
-      console.log('🧠 AI Analysis:', data.analysis.analysis);
-      console.log(`📊 Clarity Score: ${data.analysis.clarity_score}/10`);
-    }
     
     return {
       success: data.success,
@@ -220,7 +210,6 @@ class AIQuestionService {
       embedding_dimension: number;
     };
   }> {
-    console.log('🧠 Creating AI profile embedding for matching...');
     
     const response = await fetch(`${this.baseUrl}/matching/profile/create-embedding?user_id=${userId}`, {
       method: 'POST',
@@ -234,8 +223,6 @@ class AIQuestionService {
     }
 
     const data = await response.json();
-    console.log('✅ Profile embedding created successfully');
-    console.log(`📊 Embedding dimension: ${data.profile_summary?.embedding_dimension}`);
     
     return {
       success: data.success,
@@ -256,7 +243,6 @@ class AIQuestionService {
     total_found: number;
     error?: string;
   }> {
-    console.log('💕 Finding AI-powered compatibility matches...');
     
     const response = await fetch(`${this.baseUrl}/matching/matches/${userId}?limit=${limit}&min_compatibility=${minCompatibility}`, {
       method: 'GET',
@@ -270,7 +256,6 @@ class AIQuestionService {
     }
 
     const data = await response.json();
-    console.log(`✅ Found ${data.total_found} compatible matches`);
     
     return {
       matches: data.matches,
@@ -285,7 +270,6 @@ class AIQuestionService {
     explanation?: MatchExplanation;
     error?: string;
   }> {
-    console.log('📋 Generating AI match explanation...');
     
     const response = await fetch(`${this.baseUrl}/matching/match-explanation/${userAId}/${userBId}`, {
       method: 'GET',
@@ -299,8 +283,6 @@ class AIQuestionService {
     }
 
     const data = await response.json();
-    console.log('✅ Match explanation generated');
-    console.log(`💖 Compatibility: ${(data.compatibility_score * 100).toFixed(1)}%`);
     
     return {
       explanation: {
@@ -358,7 +340,6 @@ class AIQuestionService {
     total_found: number;
     error?: string;
   }> {
-    console.log('🔄 Finding matches with AI preference analysis...');
     
     const response = await fetch(`${this.baseUrl}/matching/reshuffle-matches`, {
       method: 'POST',
@@ -378,7 +359,6 @@ class AIQuestionService {
     }
 
     const data = await response.json();
-    console.log(`✨ Found ${data.total_found} preference-based matches`);
     
     return {
       matches: data.matches,
@@ -404,7 +384,6 @@ class AIQuestionService {
       errors: [] as string[]
     };
 
-    console.log('🔍 Testing backend connectivity...');
     const healthResponse = await fetch(`${this.baseUrl.replace('/api/v1', '')}/health`, {
       method: 'GET',
       timeout: 5000
@@ -416,19 +395,15 @@ class AIQuestionService {
       
       if (healthData.services?.supabase?.status === 'connected') {
         result.database = true;
-        console.log('✅ Database connection verified');
       } else {
         result.errors.push('Database not connected');
       }
       
       if (healthData.services?.azure_openai?.status === 'connected') {
         result.ai_services = true;
-        console.log('✅ AI services connection verified');
       } else {
         result.errors.push('Azure OpenAI not connected');
       }
-      
-      console.log('✅ Backend connectivity verified');
     } else {
       result.errors.push(`Backend health check failed: ${healthResponse.status}`);
     }
@@ -440,7 +415,6 @@ class AIQuestionService {
    * Get user's complete profile including answers and AI status
    */
   async getUserProfile(userId: string): Promise<UserProfile | null> {
-    console.log('📋 Loading user profile from backend...');
     
     const response = await fetch(`${this.baseUrl}/questions/user/${userId}/profile`, {
       method: 'GET',
@@ -454,8 +428,6 @@ class AIQuestionService {
     }
 
     const data = await response.json();
-    console.log('✅ User profile loaded successfully');
-    console.log(`📊 Profile: ${data.total_answers} answers, ${data.profile_completion?.completion_percentage?.toFixed(1)}% complete`);
     
     return data as UserProfile;
   }
@@ -467,7 +439,6 @@ class AIQuestionService {
     success: boolean;
     message: string;
   }> {
-    console.log('🗑️ Deleting user answer:', questionId);
     
     const response = await fetch(`${this.baseUrl}/questions/user/${userId}/answer/${questionId}`, {
       method: 'DELETE',
@@ -481,7 +452,6 @@ class AIQuestionService {
     }
 
     const data = await response.json();
-    console.log('✅ Answer deleted successfully');
     
     return {
       success: data.success || true,
