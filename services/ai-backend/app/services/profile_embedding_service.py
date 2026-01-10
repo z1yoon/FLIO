@@ -190,10 +190,11 @@ class ProfileEmbeddingService:
             logger.error(f"Failed to create embedding for user {user_id}: {e}")
             raise Exception(f"Profile embedding creation failed: {str(e)}")
     
-    async def find_compatible_matches(self, user_id: str, limit: int = 10) -> List[MatchResult]:
+    async def find_compatible_matches(self, user_id: str, limit: int = 10, excluded_user_ids: List[str] = None) -> List[MatchResult]:
         """
         Find compatible matches for a user based on embedding similarity
         Core matching algorithm for the dating app with dealbreaker filtering
+        Can exclude specific user IDs at database level for efficiency
         """
         try:
             # 1. Get user's embedding
@@ -205,8 +206,8 @@ class ProfileEmbeddingService:
             user_dealbreakers = await self._get_dealbreakers(user_id)
             logger.info(f"User {user_id} has {len(user_dealbreakers)} dealbreakers")
             
-            # 3. Find similar profiles using Supabase vector search (get more to account for filtering)
-            similar_profiles = await self._vector_similarity_search(user_id, user_embedding, limit * 5)
+            # 3. Find similar profiles using Supabase vector search (exclude rejected users at DB level)
+            similar_profiles = await self._vector_similarity_search(user_id, user_embedding, limit * 5, excluded_user_ids)
             
             # 4. Filter by dealbreakers and calculate compatibility scores
             match_results = []
@@ -402,21 +403,22 @@ class ProfileEmbeddingService:
             embedding = eval(embedding_str)  # Note: In production, use proper JSON parsing
             return embedding
             
-        except Exception as e:
-            logger.error(f"Failed to get embedding for user {user_id}: {e}")
-            return None
-    
-    async def _vector_similarity_search(self, user_id: str, user_embedding: List[float], limit: int) -> List[Dict]:
-        """Use Supabase vector similarity search to find similar profiles"""
+    async def _vector_similarity_search(self, user_id: str, user_embedding: List[float], limit: int, excluded_user_ids: List[str] = None) -> List[Dict]:
+        """Use Supabase vector similarity search to find similar profiles
+        Excludes specified user IDs at database level to avoid unnecessary API calls"""
         try:
             # Convert embedding to pgvector format
-            embedding_vector = f"[{','.join(map(str, user_embedding))}]"
+            embedding_str = f"[{','.join(map(str, user_embedding))}]"
             
-            # Use Supabase RPC function for vector similarity search
+            # Build list of excluded IDs (any rejected matches)
+            all_excluded = excluded_user_ids if excluded_user_ids else []
+            
+            # Call the RPC function for vector similarity search with exclusions
             result = self.supabase.rpc('find_similar_profiles', {
-                'query_embedding': embedding_vector,
-                'exclude_user_id': user_id,
-                'match_limit': limit
+                'query_embedding': embedding_str,
+                'exclude_user_id': user_id,  # Primary exclusion
+                'match_limit': limit,
+                'excluded_user_ids': all_excluded  # Additional exclusions (rejected matches)
             }).execute()
             
             return result.data
@@ -424,7 +426,8 @@ class ProfileEmbeddingService:
         except Exception as e:
             logger.error(f"Vector similarity search failed: {e}")
             return []
-    
+
+# ... (rest of the code remains the same)
     async def _calculate_compatibility(self, user_a_id: str, user_b_id: str) -> Dict[str, float]:
         """
         Calculate detailed compatibility score between two users
@@ -1414,36 +1417,27 @@ class ProfileEmbeddingService:
         Optimized to reduce API calls
         """
         try:
-            excluded_ids = set(excluded_match_ids or [])
-            logger.info(f"Finding preference-based matches for user {user_id} with preference: {preference}, excluding {len(excluded_ids)} previous matches")
+            excluded_ids = list(excluded_match_ids or [])
+            logger.info(f"Finding preference-based matches for user {user_id} with preference: {preference}, excluding {len(excluded_ids)} previous matches at DB level")
             
-            # 1. Get more potential matches to account for exclusions
-            fetch_limit = limit * 3 if excluded_ids else limit * 2
-            all_matches = await self.find_compatible_matches(user_id, fetch_limit)
-            
-            if not all_matches:
-                logger.warning("No matches found, returning empty list")
-                return []
-            
-            # 2. Filter out excluded matches immediately
-            if excluded_ids:
-                all_matches = [m for m in all_matches if m.user_id not in excluded_ids]
-                logger.info(f"After excluding previous matches: {len(all_matches)} candidates remaining")
+            # 1. Get potential matches with exclusions applied at database level
+            # No need to fetch extra since exclusions happen before fetching
+            all_matches = await self.find_compatible_matches(user_id, limit * 2, excluded_ids)
             
             if not all_matches:
-                logger.warning("All matches were excluded, returning empty list")
+                logger.warning("No matches found after database-level exclusions")
                 return []
             
-            # 3. Analyze user preference to extract matching criteria (uses cache if available)
+            # 2. Analyze user preference to extract matching criteria (uses cache if available)
             preference_criteria = await self._analyze_preference_criteria(preference)
             logger.info(f"Extracted preference criteria: {preference_criteria}")
             
-            # 4. Filter and re-rank matches based on preference criteria
+            # 3. Filter and re-rank matches based on preference criteria
             preference_filtered_matches = await self._filter_matches_by_preference(
                 user_id, all_matches, preference_criteria, preference
             )
             
-            # 5. Return top matches prioritizing high-preference matches
+            # 4. Return top matches prioritizing high-preference matches
             final_matches = preference_filtered_matches[:limit]
             logger.info(f"Returning {len(final_matches)} NEW preference-filtered matches")
             
