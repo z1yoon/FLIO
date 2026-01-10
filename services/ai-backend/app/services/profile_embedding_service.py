@@ -344,6 +344,9 @@ class ProfileEmbeddingService:
             # Parse pgvector format back to list
             embedding = eval(embedding_str)  # Note: In production, use proper JSON parsing
             return embedding
+        except Exception as e:
+            logger.error(f"Failed to get embedding for user {user_id}: {e}")
+            return None
             
     async def _vector_similarity_search(self, user_id: str, user_embedding: List[float], limit: int, excluded_user_ids: List[str] = None) -> List[Dict]:
         """Use Supabase vector similarity search to find similar profiles
