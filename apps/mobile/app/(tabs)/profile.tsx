@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { supabaseQuestionService, UserProfile } from '../../services/supabaseQuestionService';
-import { getCurrentUserId } from '../../services/supabase/client';
+import { getCurrentUserId, supabase } from '../../services/supabase/client';
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
 
 /**
@@ -126,6 +126,35 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      FLIOAlertAPI.alert(
+        '로그아웃',
+        '정말 로그아웃 하시겠습니까?',
+        [
+          { text: '취소', style: 'cancel' },
+          { 
+            text: '로그아웃', 
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                console.log('🚪 Logging out user...');
+                await supabase.auth.signOut();
+                console.log('✅ User logged out successfully');
+                router.replace('/');
+              } catch (error) {
+                console.error('❌ Logout failed:', error);
+                FLIOAlertAPI.alert('오류', '로그아웃 중 문제가 발생했습니다.');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('❌ Logout process failed:', error);
+    }
+  };
+
 
   // Get authenticated user ID on mount
   useEffect(() => {
@@ -179,8 +208,19 @@ export default function ProfileScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>내 프로필</Text>
-        <Text style={styles.headerSubtitle}>질문 답변 현황</Text>
+        <View style={styles.headerTop}>
+          <TouchableOpacity
+            style={styles.logoContainer}
+            onPress={() => router.replace('/')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.logoText}>FLIO</Text>
+          </TouchableOpacity>
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>내 프로필</Text>
+            <Text style={styles.headerSubtitle}>질문 답변 현황</Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -294,6 +334,26 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 24,
     paddingBottom: 20,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  logoContainer: {
+    marginRight: 16,
+  },
+  logoText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  titleContainer: {
+    flex: 1,
     alignItems: 'center',
   },
   headerTitle: {

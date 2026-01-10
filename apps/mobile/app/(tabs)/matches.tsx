@@ -232,6 +232,13 @@ export default function MatchesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.logoContainer}
+            onPress={() => router.replace('/')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.logoText}>FLIO</Text>
+          </TouchableOpacity>
           <View style={styles.titleSection}>
             <Text style={styles.headerTitle}>AI 매칭</Text>
             <Text style={styles.headerSubtitle}>당신과 잘 맞는 특별한 분들</Text>
@@ -1051,6 +1058,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
+  },
+  logoContainer: {
+    marginRight: 16,
+  },
+  logoText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   titleSection: {
     flex: 1,
