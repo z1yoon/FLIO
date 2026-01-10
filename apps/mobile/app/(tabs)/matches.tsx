@@ -133,7 +133,7 @@ export default function MatchesScreen() {
   const handleLikeMatch = (match: MatchResult) => {
     // In production, this would send like to backend
     console.log(`💕 Liked match: ${match.user_id}`);
-    FLIOAlertAPI.alert('좋아요! 💕', `${match.nickname}님에게 좋아요를 보냈습니다!`);
+    FLIOAlertAPI.alert('좋아요! 💕', `${match.name || '회원'}님에게 좋아요를 보냈습니다!`);
   };
 
   const handlePassMatch = (match: MatchResult) => {
@@ -333,19 +333,12 @@ export default function MatchesScreen() {
 
             {/* Loading State */}
             {isLoadingExplanation ? (
-              <View style={styles.loadingContainer}>
+              <View style={styles.modalLoadingContainer}>
                 <ActivityIndicator size="large" color="#4FD1C7" />
-                <Text style={styles.loadingTitle}>AI 매칭 매니저가 분석 중이에요</Text>
+                <Text style={styles.loadingTitle}>매칭 분석 중</Text>
                 <Text style={styles.loadingSubtitle}>
-                  {selectedMatch.name || '회원'}님과의 인연을{'\n'}정성껏 분석하고 있습니다
+                  {selectedMatch?.name || '회원'}님과의 궁합을 분석하고 있어요
                 </Text>
-                <View style={styles.loadingSteps}>
-                  <Text style={styles.loadingStep}>✨ 두 분의 성격 유형을 비교하고 있어요</Text>
-                  <Text style={styles.loadingStep}>💕 가치관과 라이프스타일을 분석 중이에요</Text>
-                  <Text style={styles.loadingStep}>📊 호환성 점수를 계산하고 있어요</Text>
-                  <Text style={styles.loadingStep}>💌 맞춤 조언을 준비하고 있어요</Text>
-                </View>
-                <Text style={styles.loadingHint}>잠시만 기다려주세요...</Text>
               </View>
             ) : explanation ? (
               <ScrollView 
@@ -358,7 +351,7 @@ export default function MatchesScreen() {
                 <Text style={styles.compatibilityPercentage}>
                   {Math.round(explanation.compatibility_score * 100)}%
                 </Text>
-                <Text style={styles.compatibilityLabel}>호환성</Text>
+                <Text style={styles.compatibilityLabelModal}>호환성</Text>
               </View>
 
               {/* AI Deep Analysis - First, matching category style */}
@@ -680,8 +673,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#2E7D7A',
     borderRadius: 20,
     padding: 24,
-    maxHeight: '80%',
+    maxHeight: '85%',
     width: '100%',
+    minHeight: 400,
   },
   closeButton: {
     position: 'absolute',
@@ -707,6 +701,12 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '700',
     color: '#4FD1C7',
+  },
+  compatibilityLabelModal: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 8,
   },
   explanationSummary: {
     fontSize: 16,
@@ -901,67 +901,34 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontStyle: 'italic',
   },
-  // Loading styles
-  loadingContainer: {
+  // Modal Loading styles
+  modalLoadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 60,
-    paddingHorizontal: 20,
+    paddingHorizontal: 30,
   },
   loadingTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#FFFFFF',
     marginTop: 24,
-    marginBottom: 12,
+    marginBottom: 16,
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
   loadingSubtitle: {
     fontSize: 16,
-    color: '#FFFFFF',
+    color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
-    marginBottom: 32,
     lineHeight: 24,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  loadingSteps: {
-    alignItems: 'flex-start',
-    gap: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    padding: 20,
-    borderRadius: 16,
-    width: '100%',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  loadingStep: {
-    fontSize: 15,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  loadingHint: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    marginTop: 24,
-    fontStyle: 'italic',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    paddingHorizontal: 20,
   },
   scrollContent: {
     paddingBottom: 20,
   },
   // AI Analysis emotional styles - NATURAL FLOW
-  aiSectionTitle: {
+  aiSectionTitleModal: {
     fontSize: 18,
     fontWeight: '700',
     color: '#4FD1C7',
@@ -1011,19 +978,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
-  aiReasonCard: {
+  aiReasonCardModal: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderLeftWidth: 4,
     borderLeftColor: '#4FD1C7',
-  },
-  aiReasonText: {
-    fontSize: 15,
-    color: '#FFFFFF',
-    lineHeight: 24,
-    fontWeight: '400',
   },
   aiAnalysisCard: {
     backgroundColor: 'rgba(255,255,255,0.05)',

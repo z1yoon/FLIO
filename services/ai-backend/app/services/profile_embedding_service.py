@@ -1101,6 +1101,231 @@ class ProfileEmbeddingService:
         
         return complementary[:3]  # Return top 3 complementary aspects
     
+    async def _analyze_preference_criteria(self, preference: str) -> Dict[str, Any]:
+        """
+        Hybrid AI + Cache approach to analyze user preferences
+        Uses intelligent AI analysis with caching for performance and cost optimization
+        """
+        try:
+            # Check cache first for common preferences
+            cached_analysis = await self._get_cached_preference_analysis(preference)
+            if cached_analysis:
+                logger.info(f"Using cached analysis for preference: {preference}")
+                return cached_analysis
+            
+            # Use AI for intelligent analysis of new/unique preferences
+            ai_analysis = await azure_openai_service.analyze_user_preference(preference)
+            
+            # Cache the AI analysis for future use
+            await self._cache_preference_analysis(preference, ai_analysis)
+            
+            # Convert AI analysis to our internal format
+            criteria = self._convert_ai_analysis_to_criteria(ai_analysis)
+            
+            logger.info(f"AI analyzed preference '{preference}' -> category: {ai_analysis.get('preference_category', 'unknown')}")
+            return criteria
+            
+        except Exception as e:
+            logger.error(f"Failed to analyze preference criteria: {e}")
+            # Fallback to simple keyword matching
+            return self._simple_keyword_analysis(preference)
+    
+    async def _get_cached_preference_analysis(self, preference: str) -> Dict[str, Any]:
+        """Get cached preference analysis from database"""
+        try:
+            # Check if cache table exists first
+            # Normalize preference text for consistent caching
+            normalized_preference = preference.lower().strip()
+            
+            result = self.supabase.table('preference_analysis_cache').select(
+                'analysis_data, created_at'
+            ).eq('preference_text', normalized_preference).execute()
+            
+            if result.data:
+                cache_entry = result.data[0]
+                # Check if cache is still valid (7 days)
+                from datetime import datetime, timedelta
+                created_at = datetime.fromisoformat(cache_entry['created_at'].replace('Z', '+00:00'))
+                if datetime.now().replace(tzinfo=created_at.tzinfo) - created_at < timedelta(days=7):
+                    return cache_entry['analysis_data']
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Cache table not available, skipping cache: {e}")
+            # Return None to trigger AI analysis or fallback
+            return None
+    
+    async def _cache_preference_analysis(self, preference: str, analysis: Dict[str, Any]):
+        """Cache preference analysis for future use"""
+        try:
+            normalized_preference = preference.lower().strip()
+            
+            # Store in cache table (skip if table doesn't exist)
+            self.supabase.table('preference_analysis_cache').upsert({
+                'preference_text': normalized_preference,
+                'analysis_data': analysis,
+                'usage_count': 1
+            }).execute()
+            
+            logger.info(f"Cached analysis for preference: {preference}")
+            
+        except Exception as e:
+            logger.warning(f"Cache not available, skipping cache storage: {e}")
+    
+    def _convert_ai_analysis_to_criteria(self, ai_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert AI analysis format to internal criteria format"""
+        try:
+            return {
+                'keywords': ai_analysis.get('search_keywords', []),
+                'categories': [ai_analysis.get('preference_category', 'general')],
+                'lifestyle_preferences': ai_analysis.get('matching_criteria', {}).get('must_have', []),
+                'personality_traits': ai_analysis.get('matching_criteria', {}).get('nice_to_have', []),
+                'activity_types': [ai_analysis.get('preference_category', 'general')],
+                'ai_analysis': ai_analysis,  # Keep full AI analysis for advanced matching
+                'confidence_score': ai_analysis.get('confidence_score', 0.5)
+            }
+        except Exception as e:
+            logger.error(f"Failed to convert AI analysis: {e}")
+            return self._simple_keyword_analysis(ai_analysis.get('search_keywords', [''])[0] if ai_analysis.get('search_keywords') else '')
+    
+    def _simple_keyword_analysis(self, preference: str) -> Dict[str, Any]:
+        """Fallback simple keyword analysis"""
+        criteria = {
+            'keywords': [],
+            'categories': [],
+            'lifestyle_preferences': [],
+            'personality_traits': [],
+            'activity_types': []
+        }
+        
+        preference_lower = preference.lower()
+        
+        # Basic keyword patterns
+        if any(word in preference_lower for word in ['매운', '맵', '매콤']):
+            criteria['keywords'].extend(['매운', '맵'])
+            criteria['categories'].append('음식취향')
+        elif any(word in preference_lower for word in ['운동', '헬스', '피트니스']):
+            criteria['keywords'].extend(['운동', '헬스'])
+            criteria['categories'].append('운동취향')
+        elif any(word in preference_lower for word in ['여행', '해외']):
+            criteria['keywords'].extend(['여행'])
+            criteria['categories'].append('여가활동')
+        
+        logger.info(f"Simple analysis for '{preference}': {criteria}")
+        return criteria
+    
+    async def _filter_matches_by_preference(
+        self, 
+        user_id: str, 
+        matches: List[MatchResult], 
+        criteria: Dict[str, Any],
+        original_preference: str
+    ) -> List[MatchResult]:
+        """
+        Filter and re-rank matches based on preference criteria
+        """
+        try:
+            if not criteria or not any(criteria.values()):
+                logger.info("No specific criteria found, returning original matches")
+                return matches
+            
+            scored_matches = []
+            
+            for match in matches:
+                # Get match user's answers to analyze against criteria
+                match_answers = await self._fetch_user_answers(match.user_id)
+                preference_score = await self._calculate_preference_match_score(
+                    match_answers, criteria, original_preference
+                )
+                
+                # Combine original compatibility score with preference score
+                combined_score = (match.compatibility_score * 0.6) + (preference_score * 0.4)
+                
+                # Create new match result with updated score
+                scored_match = MatchResult(
+                    user_id=match.user_id,
+                    compatibility_score=combined_score,
+                    similarity_score=match.similarity_score,
+                    cultural_bonus=match.cultural_bonus + preference_score * 0.1,  # Small bonus
+                    name=match.name,
+                    age=match.age
+                )
+                
+                scored_matches.append((scored_match, preference_score))
+            
+            # Sort by combined score (compatibility + preference)
+            scored_matches.sort(key=lambda x: x[0].compatibility_score, reverse=True)
+            
+            # Filter to prioritize matches with good preference scores
+            high_preference_matches = [match for match, pref_score in scored_matches if pref_score > 0.3]
+            remaining_matches = [match for match, pref_score in scored_matches if pref_score <= 0.3]
+            
+            # Return high preference matches first, then fill with others
+            result = high_preference_matches + remaining_matches
+            
+            logger.info(f"Preference filtering: {len(high_preference_matches)} high-preference, {len(remaining_matches)} regular")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to filter matches by preference: {e}")
+            return matches
+    
+    async def _calculate_preference_match_score(
+        self, 
+        user_answers: Dict[str, str], 
+        criteria: Dict[str, Any], 
+        original_preference: str
+    ) -> float:
+        """
+        Calculate how well a user's answers match the preference criteria
+        """
+        try:
+            score = 0.0
+            total_checks = 0
+            
+            # Check all user answers for preference keywords
+            for question_id, answer in user_answers.items():
+                if not answer:
+                    continue
+                    
+                answer_lower = answer.lower()
+                
+                # Check for direct keyword matches
+                for keyword in criteria.get('keywords', []):
+                    if keyword in answer_lower:
+                        score += 0.3
+                        total_checks += 1
+                        logger.info(f"Found keyword '{keyword}' in answer: {answer[:50]}")
+                
+                # Check lifestyle preferences
+                for lifestyle_pref in criteria.get('lifestyle_preferences', []):
+                    if lifestyle_pref == '매운음식선호' and any(word in answer_lower for word in ['매운', '맵', '매콤']):
+                        score += 0.4
+                        total_checks += 1
+                    elif lifestyle_pref == '가족중심' and any(word in answer_lower for word in ['가족', '가정', '아이']):
+                        score += 0.4
+                        total_checks += 1
+                
+                # Check activity types
+                for activity in criteria.get('activity_types', []):
+                    if activity == '운동활동' and any(word in answer_lower for word in ['운동', '헬스', '피트니스']):
+                        score += 0.3
+                        total_checks += 1
+                    elif activity == '문화예술' and any(word in answer_lower for word in ['음악', '영화', '예술']):
+                        score += 0.3
+                        total_checks += 1
+            
+            # Normalize score
+            final_score = min(score / max(total_checks, 1), 1.0) if total_checks > 0 else 0.0
+            
+            logger.info(f"Preference match score: {final_score:.2f} (found {total_checks} matches)")
+            return final_score
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate preference match score: {e}")
+            return 0.0
+    
     async def _fetch_user_profile_summary(self, user_id: str) -> Dict:
         """Fetch user profile summary using RPC function"""
         try:
@@ -1156,7 +1381,8 @@ class ProfileEmbeddingService:
             logger.info(f"Stored reshuffle feedback for user {user_id}")
             return result.data
         except Exception as e:
-            logger.error(f"Failed to store reshuffle feedback: {e}")
+            logger.warning(f"Reshuffle feedback storage not available: {e}")
+            # Continue without storing feedback
             return None
     
     async def get_reshuffle_context(self, user_id: str, limit: int = 3) -> List[Dict]:
@@ -1168,7 +1394,8 @@ class ProfileEmbeddingService:
             }).execute()
             return result.data if result.data else []
         except Exception as e:
-            logger.warning(f"Failed to get reshuffle context: {e}")
+            logger.warning(f"Reshuffle context not available: {e}")
+            # Return empty context - system will work without historical data
             return []
     
     async def find_compatible_matches_with_preference(
@@ -1180,21 +1407,36 @@ class ProfileEmbeddingService:
     ) -> List[MatchResult]:
         """
         Find matches with user preference context
-        Uses AI to analyze preference and adjust matching
+        Uses AI to analyze preference and adjust matching to find different matches
         """
         try:
-            # For now, use the same matching algorithm
-            # The preference will be used in match explanations
-            # Future: Use AI to analyze preference and adjust weights/filters
+            logger.info(f"Finding preference-based matches for user {user_id} with preference: {preference}")
             
-            # Find matches - preference will be used when generating explanations later
-            # The preference context is stored in the database and retrieved when needed
-            match_results = await self.find_compatible_matches(user_id, limit)
+            # 1. Get all potential matches (more than usual to filter from)
+            all_matches = await self.find_compatible_matches(user_id, limit * 3)
             
-            return match_results
+            # 2. Analyze user preference to extract matching criteria
+            preference_criteria = await self._analyze_preference_criteria(preference)
+            logger.info(f"Extracted preference criteria: {preference_criteria}")
+            
+            # 3. Filter and re-rank matches based on preference criteria
+            preference_filtered_matches = await self._filter_matches_by_preference(
+                user_id, all_matches, preference_criteria, preference
+            )
+            
+            # 4. If we don't have enough preference-based matches, add some regular matches
+            if len(preference_filtered_matches) < limit:
+                remaining_matches = [m for m in all_matches if m not in preference_filtered_matches]
+                preference_filtered_matches.extend(remaining_matches[:limit - len(preference_filtered_matches)])
+            
+            final_matches = preference_filtered_matches[:limit]
+            logger.info(f"Returning {len(final_matches)} preference-filtered matches")
+            
+            return final_matches
             
         except Exception as e:
             logger.error(f"Failed to find preference-based matches: {e}")
-            raise
+            # Fallback to regular matches if preference matching fails
+            return await self.find_compatible_matches(user_id, limit)
 
 profile_embedding_service = ProfileEmbeddingService()

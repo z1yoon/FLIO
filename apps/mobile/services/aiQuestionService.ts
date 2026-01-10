@@ -68,6 +68,7 @@ export interface MatchResult {
   compatibility_score: number;
   similarity_score: number;
   cultural_bonus: number;
+  name?: string;
   nickname?: string;
   age?: number;
 }
