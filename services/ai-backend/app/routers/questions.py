@@ -180,10 +180,11 @@ async def get_initial_questions(user_id: Optional[str] = None, language: str = "
                     }
                 )
         
-        # Get all active questions
+        # Get all active questions in insertion order (dealbreakers first, then others)
+        # Order by can_be_dealbreaker DESC to show dealbreakers first, then by ID to maintain SQL insertion order
         result = get_supabase_client().table('questions').select(
             'id, category, text_ko, text_en, answer_type, options, base_weight, effectiveness_score, can_be_dealbreaker, placeholder, max_length'
-        ).eq('is_active', True).order('effectiveness_score', desc=True).execute()
+        ).eq('is_active', True).order('can_be_dealbreaker', desc=True).order('id', desc=False).execute()
         
         if not result.data:
             raise HTTPException(status_code=404, detail="No questions found")

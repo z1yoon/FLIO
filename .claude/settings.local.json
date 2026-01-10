@@ -41,7 +41,8 @@
       "Bash(npx tsc:*)",
       "Bash(chmod:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(npm install:*)"
     ],
     "deny": []
   },

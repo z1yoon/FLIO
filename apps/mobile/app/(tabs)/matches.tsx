@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,12 +39,55 @@ export default function MatchesScreen() {
   const [reshufflePreference, setReshufflePreference] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
+  const [hasLoadedMatches, setHasLoadedMatches] = useState(false);
+
+  // Load cached matches from storage
+  const loadCachedMatches = async (userId: string) => {
+    try {
+      console.log(`🔍 Looking for cached matches with key: matches_${userId}`);
+      const cachedMatches = await SecureStore.getItemAsync(`matches_${userId}`);
+      
+      if (cachedMatches) {
+        const parsedMatches = JSON.parse(cachedMatches);
+        console.log(`✅ Found and loaded ${parsedMatches.length} cached matches for user`);
+        setMatches(parsedMatches);
+        setHasLoadedMatches(true);
+        setIsLoading(false);
+        return true;
+      } else {
+        console.log(`❌ No cached matches found for user ${userId}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load cached matches:', error);
+    }
+    return false;
+  };
+
+  // Save matches to storage
+  const saveCachedMatches = async (userId: string, matches: MatchResult[]) => {
+    try {
+      await SecureStore.setItemAsync(`matches_${userId}`, JSON.stringify(matches));
+      console.log(`💾 Cached ${matches.length} matches for user`);
+    } catch (error) {
+      console.error('❌ Failed to cache matches:', error);
+    }
+  };
 
   // Get authenticated user ID on mount
   useEffect(() => {
     const fetchUserId = async () => {
       const userId = await getCurrentUserId();
-      setCurrentUserId(userId);
+      if (userId) {
+        setCurrentUserId(userId);
+        // Try to load cached matches first
+        const hasCachedMatches = await loadCachedMatches(userId);
+        
+        // If no cached matches, we need to load from API
+        if (!hasCachedMatches) {
+          console.log('🔄 No cached matches found - will fetch from API...');
+          // Don't call loadMatches here - let the useEffect below handle it
+        }
+      }
     };
     fetchUserId();
   }, []);
@@ -86,6 +130,12 @@ export default function MatchesScreen() {
 
       console.log(`✅ Found ${matchResults.total_found} AI matches`);
       setMatches(matchResults.matches);
+      setHasLoadedMatches(true);
+      
+      // Cache the matches
+      if (userId) {
+        await saveCachedMatches(userId, matchResults.matches);
+      }
 
     } catch (error) {
       console.error('❌ Failed to load matches:', error);
@@ -184,6 +234,12 @@ export default function MatchesScreen() {
       
       // Backend already excluded previous matches, so just replace
       setMatches(improvedMatches.matches);
+      setHasLoadedMatches(true);
+      
+      // Cache the new matches
+      if (userId) {
+        await saveCachedMatches(userId, improvedMatches.matches);
+      }
       
       // Clear preference for next time
       setReshufflePreference('');
@@ -202,10 +258,21 @@ export default function MatchesScreen() {
   };
 
   useEffect(() => {
-    if (currentUserId) {
-      loadMatches();
-    }
-  }, [currentUserId]);
+    // Add a small delay to ensure cached data is loaded first
+    const timer = setTimeout(() => {
+      console.log(`🔍 Effect triggered - userId: ${currentUserId ? 'exists' : 'none'}, hasLoaded: ${hasLoadedMatches}, matches: ${matches.length}`);
+      
+      if (currentUserId && !hasLoadedMatches && matches.length === 0) {
+        console.log('🔄 First load for user - fetching matches from API...');
+        loadMatches();
+      } else if (currentUserId && (hasLoadedMatches || matches.length > 0)) {
+        console.log('✅ User already has cached matches - skipping API call');
+        setIsLoading(false);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [currentUserId, hasLoadedMatches, matches.length]);
 
   if (isLoading) {
     return (
@@ -232,24 +299,26 @@ export default function MatchesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity
-            style={styles.logoContainer}
-            onPress={() => router.replace('/')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.logoText}>FLIO</Text>
-          </TouchableOpacity>
           <View style={styles.titleSection}>
             <Text style={styles.headerTitle}>AI 매칭</Text>
             <Text style={styles.headerSubtitle}>당신과 잘 맞는 특별한 분들</Text>
           </View>
-          <TouchableOpacity
-            style={styles.reshuffleButton}
-            onPress={() => setShowReshuffleDialog(true)}
-          >
-            <Ionicons name="shuffle" size={20} color="#FFFFFF" />
-            <Text style={styles.reshuffleButtonText}>새로운 매칭</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.reshuffleButton}
+              onPress={() => setShowReshuffleDialog(true)}
+            >
+              <Ionicons name="shuffle" size={20} color="#FFFFFF" />
+              <Text style={styles.reshuffleButtonText}>새로운 매칭</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.userAccountButton}
+              onPress={() => router.push('/account')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="person-circle" size={32} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -1059,20 +1128,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
   },
-  logoContainer: {
-    marginRight: 16,
-  },
-  logoText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
   titleSection: {
     flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  userAccountButton: {
+    padding: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   reshuffleButton: {
     flexDirection: 'row',
