@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import services and routers
-from app.routers import questions, matching, auth
+from app.routers import questions, matching, auth, voice
 from app.services.azure_openai_service import azure_openai_service
 from app.models.database import get_supabase_client
 
@@ -81,6 +81,7 @@ app.add_middleware(
 app.include_router(questions.router, prefix="/api/v1/questions", tags=["Questions & Answers"])
 app.include_router(matching.router, prefix="/api/v1/matching", tags=["Profile Matching"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(voice.router, prefix="/api/v1/voice", tags=["Voice Processing"])
 logger.info("Routers included successfully")
 
 

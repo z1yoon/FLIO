@@ -91,17 +91,13 @@ class VoiceAccessibilityService {
         type: 'audio/m4a',
         name: 'recording.m4a',
       } as any);
-      formData.append('model', 'whisper-1');
       formData.append('language', 'ko');
 
       // Send to backend for transcription
-      const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-      const response = await fetch(`${baseUrl}/voice/transcribe`, {
+      const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${baseUrl}/api/v1/voice/transcribe`, {
         method: 'POST',
         body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
       });
 
       if (!response.ok) {
@@ -109,6 +105,10 @@ class VoiceAccessibilityService {
       }
 
       const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Transcription failed');
+      }
+      
       return result.text || '';
     } catch (error) {
       console.error('Transcription error:', error);

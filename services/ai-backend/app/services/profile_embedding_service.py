@@ -560,9 +560,24 @@ class ProfileEmbeddingService:
             
             answers_b = {item['question_id']: (item.get('answer_text') or item.get('answer_value')) for item in result_b.data}
             
-            # Get user B's profile for gender check
-            profile_b = self.supabase.table('profiles').select('gender').eq('user_id', user_b_id).execute()
+            # Get user profiles for gender and age checks
+            profile_a = self.supabase.table('profiles').select('birth_date').eq('user_id', user_a_id).execute()
+            profile_b = self.supabase.table('profiles').select('gender, birth_date').eq('user_id', user_b_id).execute()
+            
             user_b_gender = profile_b.data[0]['gender'] if profile_b.data else None
+            user_a_birth_date = profile_a.data[0]['birth_date'] if profile_a.data else None
+            user_b_birth_date = profile_b.data[0]['birth_date'] if profile_b.data else None
+            
+            # Calculate ages from birth_date
+            from datetime import datetime
+            user_a_age = None
+            user_b_age = None
+            if user_a_birth_date:
+                birth_date_a = datetime.fromisoformat(user_a_birth_date.replace('Z', '+00:00'))
+                user_a_age = datetime.now().year - birth_date_a.year
+            if user_b_birth_date:
+                birth_date_b = datetime.fromisoformat(user_b_birth_date.replace('Z', '+00:00'))
+                user_b_age = datetime.now().year - birth_date_b.year
             
             # Check each dealbreaker
             for question_id, required_answer in user_a_dealbreakers.items():
@@ -571,6 +586,26 @@ class ProfileEmbeddingService:
                     if required_answer in ['male', 'female'] and user_b_gender != required_answer:
                         logger.info(f"Dealbreaker violated: gender_preference requires {required_answer}, but user B is {user_b_gender}")
                         return False
+                    continue
+                
+                # Special handling for age_range_preference dealbreaker
+                if question_id == 'age_range_preference':
+                    if user_a_age and user_b_age:
+                        age_diff = abs(user_a_age - user_b_age)
+                        
+                        if required_answer == 'same_age':  # ±2 years
+                            if age_diff > 2:
+                                logger.info(f"Dealbreaker violated: age_range_preference requires same age ±2, but age diff is {age_diff}")
+                                return False
+                        elif required_answer == 'younger_5':  # Up to 5 years younger
+                            if user_b_age > user_a_age or age_diff > 5:
+                                logger.info(f"Dealbreaker violated: age_range_preference requires younger ≤5, but user B is {user_b_age} vs user A {user_a_age}")
+                                return False
+                        elif required_answer == 'older_5':  # Up to 5 years older
+                            if user_b_age < user_a_age or age_diff > 5:
+                                logger.info(f"Dealbreaker violated: age_range_preference requires older ≤5, but user B is {user_b_age} vs user A {user_a_age}")
+                                return False
+                        # 'age_gap_ok' - no filtering needed
                     continue
                 
                 # Check if user B has answered this question
