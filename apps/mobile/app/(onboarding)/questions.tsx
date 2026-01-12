@@ -20,6 +20,9 @@ import { StatusBar } from 'expo-status-bar';
 import { supabaseQuestionService, Question, Answer } from '../../services/supabaseQuestionService';
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
 import { supabase, getCurrentUserId } from '../../services/supabase/client';
+import { voiceAccessibilityService } from '../../services/voiceAccessibilityService';
+import { VoiceButton, SpeakButton } from '../../components/VoiceButton';
+import { VoiceSettingsComponent } from '../../components/VoiceSettings';
 
 const { width, height } = Dimensions.get('window');
 
@@ -62,6 +65,8 @@ export default function QuestionsScreen() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -258,12 +263,34 @@ export default function QuestionsScreen() {
     }
   };
 
-  // Initialize screen reader check
+  // Initialize voice and accessibility features
   useEffect(() => {
-    AccessibilityInfo.isScreenReaderEnabled().then(screenReaderEnabled => {
-      setIsScreenReaderEnabled(screenReaderEnabled);
-    });
+    const initializeVoiceFeatures = async () => {
+      try {
+        // Check screen reader
+        const screenReaderEnabled = await AccessibilityInfo.isScreenReaderEnabled();
+        setIsScreenReaderEnabled(screenReaderEnabled);
+        
+        // Initialize voice service
+        await voiceAccessibilityService.initialize();
+        
+        // Get current voice settings
+        const settings = voiceAccessibilityService.getSettings();
+        setVoiceEnabled(settings.enabled);
+        
+      } catch (error) {
+        console.log('Voice features not available:', error);
+      }
+    };
+    
+    initializeVoiceFeatures();
   }, []);
+
+  // Update voice enabled state when settings change
+  useEffect(() => {
+    const settings = voiceAccessibilityService.getSettings();
+    setVoiceEnabled(settings.enabled);
+  }, [showVoiceSettings]);
 
 
   useEffect(() => {
@@ -308,10 +335,33 @@ export default function QuestionsScreen() {
     await processAnswerAndGetNext(option);
   };
 
-  const handleVoiceInput = () => {
-    if (!isScreenReaderEnabled) return;
-    setIsListening(!isListening);
-    // TODO: Implement actual voice recognition
+  const handleVoiceInput = async () => {
+    if (!voiceEnabled) return;
+    
+    try {
+      if (!isListening) {
+        // Start recording
+        setIsListening(true);
+        await voiceAccessibilityService.startRecording();
+        await voiceAccessibilityService.speak("음성 입력을 시작합니다");
+      } else {
+        // Stop recording and transcribe
+        setIsListening(false);
+        
+        const audioUri = await voiceAccessibilityService.stopRecording();
+        if (audioUri) {
+          const transcription = await voiceAccessibilityService.transcribeAudio(audioUri);
+          if (transcription) {
+            setTextAnswer(transcription);
+            await voiceAccessibilityService.speak("음성이 인식되었습니다");
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Voice input error:', error);
+      setIsListening(false);
+      await voiceAccessibilityService.speak("음성 인식에 실패했습니다");
+    }
   };
 
 
@@ -351,14 +401,24 @@ export default function QuestionsScreen() {
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Back Button */}
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={handleGoBack}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        {/* Header with Back Button and Voice Settings */}
+        <View style={styles.headerControls}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleGoBack}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.voiceSettingsButton}
+            onPress={() => setShowVoiceSettings(!showVoiceSettings)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="volume-high-outline" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
 
 
       <ScrollView
@@ -367,6 +427,13 @@ export default function QuestionsScreen() {
         showsVerticalScrollIndicator={false}
         bounces={true}
       >
+        {/* Voice Settings Panel */}
+        {showVoiceSettings && (
+          <View style={styles.voiceSettingsPanel}>
+            <VoiceSettingsComponent />
+          </View>
+        )}
+        
         {/* Progress Bar */}
         <View style={styles.progressContainer}>
           <Text 
@@ -419,14 +486,22 @@ export default function QuestionsScreen() {
               >
                 {getCategoryLabel(currentQuestion.category)}
               </Text>
-              <Text 
-                style={styles.questionText}
-                accessible={true}
-                accessibilityRole="text"
-                accessibilityLabel={`질문: ${currentQuestion.text}`}
-              >
-                {currentQuestion.text}
-              </Text>
+              <View style={styles.questionTextContainer}>
+                <Text 
+                  style={styles.questionText}
+                  accessible={true}
+                  accessibilityRole="text"
+                  accessibilityLabel={`질문: ${currentQuestion.text}`}
+                >
+                  {currentQuestion.text}
+                </Text>
+                {voiceEnabled && (
+                  <SpeakButton 
+                    text={currentQuestion.text} 
+                    disabled={isSpeaking}
+                  />
+                )}
+              </View>
             </>
           ) : isLoadingQuestion ? (
             <>
@@ -540,8 +615,8 @@ export default function QuestionsScreen() {
           </Animated.View>
         )}
 
-        {/* Voice Input Button - Show only for screen reader users */}
-        {isScreenReaderEnabled && (
+        {/* Voice Input Button - Show when voice is enabled */}
+        {voiceEnabled && currentQuestion && currentQuestion.answer_type === 'text' && (
           <TouchableOpacity
             style={[styles.voiceButton, isListening && styles.voiceButtonActive]}
             onPress={handleVoiceInput}
@@ -606,10 +681,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backButton: {
-    position: 'absolute',
-    top: 60,
-    left: 20,
-    zIndex: 10,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -620,16 +691,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   scrollContent: {
-    paddingTop: 120,
+    paddingTop: 150,
     paddingBottom: 40,
   },
   progressContainer: {
     position: 'absolute',
-    top: 80,
+    top: 110,
     left: 20,
     right: 20,
     alignItems: 'center',
-    zIndex: 10,
+    zIndex: 5,
   },
   progressBar: {
     height: 3,
@@ -891,5 +962,46 @@ const styles = StyleSheet.create({
   textInputDisabled: {
     opacity: 0.6,
     color: 'rgba(255, 255, 255, 0.5)',
+  },
+  headerControls: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 10,
+    zIndex: 10,
+    minHeight: 44,
+  },
+  voiceSettingsButton: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 22,
+    padding: 10,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    shadowColor: 'rgba(0, 0, 0, 0.2)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  voiceSettingsPanel: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  questionTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
   },
 });

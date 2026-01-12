@@ -308,7 +308,7 @@ export default function MatchesScreen() {
               style={styles.reshuffleButton}
               onPress={() => setShowReshuffleDialog(true)}
             >
-              <Ionicons name="shuffle" size={20} color="#FFFFFF" />
+              <Ionicons name="shuffle" size={18} color="#FFFFFF" />
               <Text style={styles.reshuffleButtonText}>새로운 매칭</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -316,7 +316,7 @@ export default function MatchesScreen() {
               onPress={() => router.push('/account')}
               activeOpacity={0.7}
             >
-              <Ionicons name="person-circle" size={32} color="#FFFFFF" />
+              <Ionicons name="person-circle" size={28} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1130,24 +1130,26 @@ const styles = StyleSheet.create({
   },
   titleSection: {
     flex: 1,
+    marginRight: 8,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    flexShrink: 0,
   },
   userAccountButton: {
-    padding: 4,
+    padding: 6,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
   reshuffleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     gap: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1156,7 +1158,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   reshuffleButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#FFFFFF',
   },
