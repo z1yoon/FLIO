@@ -49,8 +49,8 @@ export interface UserProfile {
 }
 
 class SupabaseQuestionService {
-  private readonly TOTAL_QUESTIONS = 40;
-  private readonly MIN_QUESTIONS_FOR_MATCHING = 10;
+  private readonly TOTAL_QUESTIONS = 42;  // Updated to match actual DB count
+  private readonly MIN_QUESTIONS_FOR_MATCHING = 42;  // Require ALL questions before matching
 
   /**
    * Load all questions from Supabase database

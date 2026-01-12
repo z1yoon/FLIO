@@ -505,7 +505,7 @@ async def get_user_profile(user_id: str):
             "total_questions": total_questions,
             "answered_questions": answered_questions,
             "completion_percentage": completion_percentage,
-            "can_start_matching": answered_questions >= 3  # Minimum for matching
+            "can_start_matching": answered_questions >= total_questions  # Must answer ALL questions before matching
         }
         
         return UserProfileResponse(

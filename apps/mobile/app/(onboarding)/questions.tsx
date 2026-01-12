@@ -21,8 +21,6 @@ import { supabaseQuestionService, Question, Answer } from '../../services/supaba
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
 import { supabase, getCurrentUserId } from '../../services/supabase/client';
 import { voiceAccessibilityService } from '../../services/voiceAccessibilityService';
-import { VoiceButton, SpeakButton } from '../../components/VoiceButton';
-import { VoiceSettingsComponent } from '../../components/VoiceSettings';
 
 const { width, height } = Dimensions.get('window');
 
@@ -65,7 +63,6 @@ export default function QuestionsScreen() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false);
-  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -109,59 +106,65 @@ export default function QuestionsScreen() {
   const loadInitialQuestions = async (currentUserId: string) => {
     try {
       setIsLoadingQuestion(true);
-      
+
       // Get user's current progress
       const userProfile = await supabaseQuestionService.getUserProfile(currentUserId);
       const answeredCount = userProfile?.total_answers || 0;
       const completionPercentage = userProfile?.profile_completion.completion_percentage || 0;
-      
+      const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
+
       console.log(`📊 Resuming profile completion: ${answeredCount} answers (${completionPercentage.toFixed(1)}%)`);
-      
-      // Load unanswered questions from Supabase
-      const unansweredQuestions = await supabaseQuestionService.getUnansweredQuestions(currentUserId);
-      
-      if (unansweredQuestions.length === 0) {
-        // No more unanswered questions - check if user can start matching
-        const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
-        
-        if (canStartMatching) {
-          // Profile complete - go to complete screen
-          console.log('✅ All questions completed and can start matching!');
-          router.replace({
-            pathname: '/(onboarding)/complete',
-            params: { 
-              userId: currentUserId,
-              name: userName,
-              age: userAge,
-              gender: userGender,
-              hasAIProfile: 'true'
-            }
-          });
-        } else {
-          // Answered all available questions but not enough for matching
-          console.log('⚠️ No unanswered questions but insufficient answers for matching');
-          FLIOAlertAPI.alert(
-            '프로필 완성 중',
-            `현재 ${answeredCount}개의 질문에 답변하셨습니다. 더 많은 질문이 곧 추가될 예정입니다. 지금은 매칭 화면으로 이동합니다.`,
-            [
-              {
-                text: '확인',
-                onPress: () => router.replace('/(tabs)/matches')
-              }
-            ]
-          );
-        }
+
+      // Check if profile is complete
+      if (canStartMatching) {
+        console.log('✅ All questions completed and can start matching!');
+        router.replace({
+          pathname: '/(onboarding)/complete',
+          params: {
+            userId: currentUserId,
+            name: userName,
+            age: userAge,
+            gender: userGender,
+            hasAIProfile: 'true'
+          }
+        });
         return;
       }
-      
-      setQuestions(unansweredQuestions);
-      console.log(`📝 Loaded ${unansweredQuestions.length} unanswered questions (continuing from ${answeredCount} answered)`);
-      
+
+      // Load ALL questions (not just unanswered)
+      const allQuestions = await supabaseQuestionService.getAllQuestions(currentUserId);
+
+      if (allQuestions.length === 0) {
+        FLIOAlertAPI.alert('오류', '질문을 불러올 수 없습니다. 다시 시도해주세요.');
+        return;
+      }
+
+      // Get list of answered question IDs
+      const answeredQuestionIds = new Set(userProfile?.answers.map(a => a.question_id) || []);
+
+      // Find the first unanswered question
+      const firstUnansweredIndex = allQuestions.findIndex(q => !answeredQuestionIds.has(q.id));
+
+      if (firstUnansweredIndex === -1) {
+        // All questions answered but can't match yet (shouldn't happen with new logic)
+        console.log('⚠️ All questions answered but cannot start matching');
+        FLIOAlertAPI.alert(
+          '프로필 완성 중',
+          `현재 ${answeredCount}개의 질문에 답변하셨습니다.`,
+          [{ text: '확인', onPress: () => router.replace('/(tabs)/matches') }]
+        );
+        return;
+      }
+
+      setQuestions(allQuestions);
+      setCurrentQuestionIndex(firstUnansweredIndex);
+      console.log(`📝 Loaded ${allQuestions.length} total questions, starting at question ${firstUnansweredIndex + 1}`);
+
       // Show resumption message for existing users
       if (answeredCount > 0) {
         FLIOAlertAPI.alert(
           '프로필 완성 재개',
-          `이전에 답변하신 ${answeredCount}개 질문에서 이어서 진행합니다.`,
+          `질문 ${firstUnansweredIndex + 1}번부터 이어서 진행합니다.`,
           [{ text: '계속하기', onPress: () => {} }]
         );
       }
@@ -209,26 +212,32 @@ export default function QuestionsScreen() {
 
         setAnswersContext(updatedContext);
 
-        // Progress to next question or complete
-        if (currentQuestionIndex < questions.length - 1) {
-          setCurrentQuestionIndex(currentQuestionIndex + 1);
+        // Find next unanswered question
+        const answeredIds = new Set([...updatedContext.previous_answers.map(a => a.question_id), currentQuestion.id]);
+        const nextUnansweredIndex = questions.findIndex((q, idx) =>
+          idx > currentQuestionIndex && !answeredIds.has(q.id)
+        );
+
+        if (nextUnansweredIndex !== -1) {
+          // Found next unanswered question
+          setCurrentQuestionIndex(nextUnansweredIndex);
           setTextAnswer(''); // Clear text input
         } else {
-          // All questions completed - check profile status
+          // No more unanswered questions - check profile status
           console.log('🎯 All questions completed! Checking profile status...');
-          
+
           try {
             // Get user profile to check completion status
             const userProfile = await supabaseQuestionService.getUserProfile(userId);
             const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
             const completionPercentage = userProfile?.profile_completion.completion_percentage || 0;
-            
+
             console.log(`✅ Profile completed: ${completionPercentage.toFixed(1)}% (${userProfile?.total_answers} answers)`);
-            
+
             // Go directly to completion screen
             router.replace({
               pathname: '/(onboarding)/complete',
-              params: { 
+              params: {
                 userId: userId,
                 name: userName,
                 age: userAge,
@@ -242,7 +251,7 @@ export default function QuestionsScreen() {
             // Continue even if profile check fails
             router.replace({
               pathname: '/(onboarding)/complete',
-              params: { 
+              params: {
                 userId: userId,
                 name: userName,
                 age: userAge,
@@ -286,11 +295,6 @@ export default function QuestionsScreen() {
     initializeVoiceFeatures();
   }, []);
 
-  // Update voice enabled state when settings change
-  useEffect(() => {
-    const settings = voiceAccessibilityService.getSettings();
-    setVoiceEnabled(settings.enabled);
-  }, [showVoiceSettings]);
 
 
   useEffect(() => {
@@ -377,12 +381,44 @@ export default function QuestionsScreen() {
 
   const handleGoBack = () => {
     if (currentQuestionIndex > 0) {
-      // Go back to previous question
-      setCurrentQuestionIndex(prev => prev - 1);
+      // Find previous unanswered question
+      const answeredIds = new Set(answersContext.previous_answers.map(a => a.question_id));
+      let prevIndex = currentQuestionIndex - 1;
+
+      // Skip over answered questions when going back
+      while (prevIndex >= 0 && answeredIds.has(questions[prevIndex].id)) {
+        prevIndex--;
+      }
+
+      if (prevIndex >= 0) {
+        setCurrentQuestionIndex(prevIndex);
+      } else {
+        console.log('⚠️ No previous unanswered questions');
+      }
     } else {
-      // Can't go back from first question - user is in onboarding flow
-      // Just stay on the first question
       console.log('⚠️ Already at first question');
+    }
+  };
+
+  const handleReadAll = async () => {
+    if (!currentQuestion || !voiceEnabled) return;
+
+    try {
+      setIsSpeaking(true);
+
+      // Read the question first
+      await voiceAccessibilityService.speak(currentQuestion.text);
+
+      // Then read all options if it's a choice question
+      if (currentQuestion.type === 'choice' && currentQuestion.options) {
+        for (let i = 0; i < currentQuestion.options.length; i++) {
+          await voiceAccessibilityService.speak(`보기 ${i + 1}: ${currentQuestion.options[i]}`);
+        }
+      }
+    } catch (error) {
+      console.error('Read all error:', error);
+    } finally {
+      setIsSpeaking(false);
     }
   };
 
@@ -401,23 +437,55 @@ export default function QuestionsScreen() {
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header with Back Button and Voice Settings */}
+        {/* Header with Back Button, Read All, and Account */}
         <View style={styles.headerControls}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={handleGoBack}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={styles.voiceSettingsButton}
-            onPress={() => setShowVoiceSettings(!showVoiceSettings)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="volume-high-outline" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={styles.leftHeaderControls}>
+            {currentQuestionIndex > 0 && (() => {
+              // Check if there are any unanswered questions before current one
+              const answeredIds = new Set(answersContext.previous_answers.map(a => a.question_id));
+              const hasPreviousUnanswered = questions.slice(0, currentQuestionIndex).some(q => !answeredIds.has(q.id));
+              return hasPreviousUnanswered ? (
+                <TouchableOpacity
+                  style={styles.backButton}
+                  onPress={handleGoBack}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+              ) : null;
+            })()}
+          </View>
+
+          <View style={styles.rightHeaderControls}>
+            {voiceEnabled && currentQuestion && (
+              <TouchableOpacity
+                style={styles.readAllButton}
+                onPress={handleReadAll}
+                activeOpacity={0.7}
+                disabled={isSpeaking}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="질문과 보기 전체 듣기"
+              >
+                <Ionicons
+                  name={isSpeaking ? "volume-high" : "volume-medium-outline"}
+                  size={24}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.accountButton}
+              onPress={() => router.push('/account')}
+              activeOpacity={0.7}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="계정 설정 및 로그아웃"
+            >
+              <Ionicons name="person-circle" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
 
 
@@ -427,13 +495,6 @@ export default function QuestionsScreen() {
         showsVerticalScrollIndicator={false}
         bounces={true}
       >
-        {/* Voice Settings Panel */}
-        {showVoiceSettings && (
-          <View style={styles.voiceSettingsPanel}>
-            <VoiceSettingsComponent />
-          </View>
-        )}
-        
         {/* Progress Bar */}
         <View style={styles.progressContainer}>
           <Text 
@@ -486,22 +547,14 @@ export default function QuestionsScreen() {
               >
                 {getCategoryLabel(currentQuestion.category)}
               </Text>
-              <View style={styles.questionTextContainer}>
-                <Text 
-                  style={styles.questionText}
-                  accessible={true}
-                  accessibilityRole="text"
-                  accessibilityLabel={`질문: ${currentQuestion.text}`}
-                >
-                  {currentQuestion.text}
-                </Text>
-                {voiceEnabled && (
-                  <SpeakButton 
-                    text={currentQuestion.text} 
-                    disabled={isSpeaking}
-                  />
-                )}
-              </View>
+              <Text
+                style={styles.questionText}
+                accessible={true}
+                accessibilityRole="text"
+                accessibilityLabel={`질문: ${currentQuestion.text}`}
+              >
+                {currentQuestion.text}
+              </Text>
             </>
           ) : isLoadingQuestion ? (
             <>
@@ -644,27 +697,27 @@ export default function QuestionsScreen() {
 
 function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
-    'MBTI성향': '🧠 MBTI 성향',
-    '갈등해결': '💬 갈등해결',
-    '가족관계': '👨‍👩‍👧 가족관계',
-    '재정관리': '💰 재정관리',
-    '감정지원': '❤️ 감정지원',
-    '미래계획': '🎯 미래계획',
-    '친밀감': '💕 친밀감',
-    '소통방식': '🗣️ 소통방식',
-    '결혼계획': '💍 결혼계획',
-    '가족가치관': '🏠 가족가치관',
-    '라이프스타일': '🏃 라이프스타일',
-    '경제관념': '💼 경제관념',
-    '애착스타일': '🤝 애착스타일',
-    '성격': '🎭 성격',
-    '가치관': '💎 가치관',
+    'MBTI성향': 'MBTI 성향',
+    '갈등해결': '갈등해결',
+    '가족관계': '가족관계',
+    '재정관리': '재정관리',
+    '감정지원': '감정지원',
+    '미래계획': '미래계획',
+    '친밀감': '친밀감',
+    '소통방식': '소통방식',
+    '결혼계획': '결혼계획',
+    '가족가치관': '가족가치관',
+    '라이프스타일': '라이프스타일',
+    '경제관념': '경제관념',
+    '애착스타일': '애착스타일',
+    '성격': '성격',
+    '가치관': '가치관',
     // Legacy support
-    결혼: '💍 결혼계획',
-    가족: '🏠 가족가치관',
-    재정: '💼 경제관념',
-    연애: '💕 애착스타일',
-    직장: '💼 경제관념'
+    결혼: '결혼계획',
+    가족: '가족가치관',
+    재정: '경제관념',
+    연애: '애착스타일',
+    직장: '경제관념'
   };
   return labels[category] || category;
 }
@@ -976,32 +1029,32 @@ const styles = StyleSheet.create({
     zIndex: 10,
     minHeight: 44,
   },
-  voiceSettingsButton: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 22,
-    padding: 10,
+  leftHeaderControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rightHeaderControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  accountButton: {
     width: 44,
     height: 44,
+    borderRadius: 22,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  readAllButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.4)',
-    shadowColor: 'rgba(0, 0, 0, 0.2)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  voiceSettingsPanel: {
-    marginHorizontal: 20,
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  questionTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
   },
 });

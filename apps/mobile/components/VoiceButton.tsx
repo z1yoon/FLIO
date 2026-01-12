@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { voiceAccessibilityService } from '../services/voiceAccessibilityService';
 
 interface VoiceButtonProps {
@@ -75,11 +76,13 @@ export const VoiceButton: React.FC<VoiceButtonProps> = ({
 
 interface SpeakButtonProps {
   text: string;
+  options?: string[];
   disabled?: boolean;
 }
 
 export const SpeakButton: React.FC<SpeakButtonProps> = ({
   text,
+  options = [],
   disabled = false
 }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -89,7 +92,16 @@ export const SpeakButton: React.FC<SpeakButtonProps> = ({
 
     try {
       setIsSpeaking(true);
+
+      // Read the question first
       await voiceAccessibilityService.speak(text);
+
+      // Then read all options if provided
+      if (options.length > 0) {
+        for (let i = 0; i < options.length; i++) {
+          await voiceAccessibilityService.speak(`보기 ${i + 1}: ${options[i]}`);
+        }
+      }
     } catch (error) {
       console.error('Speech error:', error);
     } finally {
@@ -99,18 +111,21 @@ export const SpeakButton: React.FC<SpeakButtonProps> = ({
 
   return (
     <TouchableOpacity
-      style={[styles.speakButton, disabled && styles.disabled]}
+      style={[styles.speakButton, disabled && styles.disabled, isSpeaking && styles.speaking]}
       onPress={handleSpeak}
       disabled={disabled || isSpeaking}
-      accessibilityLabel={isSpeaking ? "읽는 중" : "텍스트 읽기"}
+      accessibilityLabel={isSpeaking ? "읽는 중" : options.length > 0 ? "질문과 보기 전체 듣기" : "텍스트 읽기"}
       accessibilityRole="button"
     >
-      <Text style={styles.speakButtonText}>
-        {isSpeaking ? "읽는 중..." : "읽기"}
-      </Text>
+      <Ionicons
+        name={isSpeaking ? "volume-high" : "volume-medium-outline"}
+        size={20}
+        color="#FFFFFF"
+      />
     </TouchableOpacity>
   );
 };
+
 
 const styles = StyleSheet.create({
   button: {
@@ -137,18 +152,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   speakButton: {
-    backgroundColor: '#34C759',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     marginLeft: 8,
-    minHeight: 36,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  speakButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '500',
+  speaking: {
+    backgroundColor: 'rgba(79, 209, 199, 0.3)',
+    borderColor: '#4FD1C7',
   },
 });
