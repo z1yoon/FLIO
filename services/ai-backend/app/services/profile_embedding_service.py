@@ -47,17 +47,15 @@ class ProfileEmbeddingService:
     
     async def build_profile_text(self, user_answers: Dict[str, str]) -> str:
         """
-        Build text from ONLY the 5 open-ended questions for embedding generation
-        Static choice questions (Q1-35) are handled by exact matching, not embeddings
-        Only text questions (Q36-40) need semantic similarity via embeddings
+        Build text from ONLY the 3 open-ended questions for embedding generation
+        Static choice questions are handled by exact matching, not embeddings
+        Only text questions need semantic similarity via embeddings
         """
-        # Only include the 5 open-ended text questions
+        # Only include the 3 open-ended text questions
         text_question_ids = [
             'personal_values_lifestyle',      # Q36: 가치관과 라이프스타일
             'ideal_relationship_dynamic',     # Q37: 이상적인 관계 역학
-            'future_life_vision',             # Q38: 미래 삶의 비전
             'conflict_growth_philosophy',     # Q39: 갈등과 성장 철학
-            'life_philosophy_happiness'       # Q40: 인생 철학과 행복
         ]
         
         # Extract only text question answers
@@ -449,8 +447,7 @@ class ProfileEmbeddingService:
         """
         try:
             text_question_ids = {
-                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'future_life_vision',
-                'conflict_growth_philosophy', 'life_philosophy_happiness'
+                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'conflict_growth_philosophy'
             }
             
             answers_a = await self._fetch_user_answers(user_a_id)
@@ -485,8 +482,7 @@ class ProfileEmbeddingService:
         try:
             # Text questions that should be excluded from static matching
             text_question_ids = {
-                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'future_life_vision',
-                'conflict_growth_philosophy', 'life_philosophy_happiness'
+                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'conflict_growth_philosophy'
             }
             
             answers_a = await self._fetch_user_answers(user_a_id)
@@ -849,14 +845,12 @@ class ProfileEmbeddingService:
                                                         compatibility_score: float,
                                                         reshuffle_preference: str = None,
                                                         reshuffle_context: List[Dict] = None) -> Optional[object]:
-        """Generate AI explanation only for open-ended text questions (Q36-40)
+        """Generate AI explanation only for open-ended text questions
         Can include reshuffle preference to personalize explanation"""
         try:
-            # Extract only text questions (Q36-40: personal_values_lifestyle, ideal_relationship_dynamic, 
-            # future_life_vision, conflict_growth_philosophy, life_philosophy_happiness)
+            # Extract only text questions (personal_values_lifestyle, ideal_relationship_dynamic, conflict_growth_philosophy)
             text_question_ids = [
-                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'future_life_vision',
-                'conflict_growth_philosophy', 'life_philosophy_happiness'
+                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'conflict_growth_philosophy'
             ]
             
             # Filter to only text questions that both users answered

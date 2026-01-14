@@ -49,7 +49,9 @@
       "mcp__filesystem__list_directory",
       "WebSearch",
       "mcp__filesystem__list_allowed_directories",
-      "mcp__supabase__execute_sql"
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__apply_migration"
     ],
     "deny": []
   },

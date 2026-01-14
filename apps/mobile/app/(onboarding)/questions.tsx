@@ -131,8 +131,8 @@ export default function QuestionsScreen() {
         return;
       }
 
-      // Load ALL questions (not just unanswered)
-      const allQuestions = await supabaseQuestionService.getAllQuestions(currentUserId);
+      // Load ALL questions (not filtered by user) to properly track progress
+      const allQuestions = await supabaseQuestionService.getAllQuestions();
 
       if (allQuestions.length === 0) {
         FLIOAlertAPI.alert('오류', '질문을 불러올 수 없습니다. 다시 시도해주세요.');

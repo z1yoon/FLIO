@@ -49,8 +49,8 @@ export interface UserProfile {
 }
 
 class SupabaseQuestionService {
-  private readonly TOTAL_QUESTIONS = 42;  // Updated to match actual DB count
-  private readonly MIN_QUESTIONS_FOR_MATCHING = 42;  // Require ALL questions before matching
+  private readonly TOTAL_QUESTIONS = 44;  // Updated: 41 choice + 3 text (research-optimized 2024)
+  private readonly MIN_QUESTIONS_FOR_MATCHING = 44;  // Require ALL questions before matching
 
   /**
    * Load all questions from Supabase database
@@ -287,16 +287,25 @@ class SupabaseQuestionService {
         throw new Error(`Failed to fetch answers: ${answersError.message}`);
       }
 
-      // Define proper question order (Q1-Q40)
+      // Define proper question order (Q1-Q44) - Research-optimized 2024
       const questionOrder = [
-        'marriage_timeline', 'children_plan', 'disability_acceptance', 'conflict_resolution', 'trust_jealousy',
-        'emotional_support', 'communication_frequency', 'attachment_style', 'love_language', 'date_frequency',
-        'anniversary_importance', 'future_planning', 'personal_space', 'social_life_balance', 'physical_affection',
+        // Core compatibility (Q1-Q15)
+        'marriage_timeline', 'children_plan', 'conflict_resolution', 'trust_jealousy',
+        'criticism_expression', 'partner_mistake_reaction', 'argument_reconnection',
+        'good_news_response', 'disagreement_comfort',
+        'emotional_support', 'communication_frequency', 'attachment_style', 'love_language',
+        'anniversary_importance', 'future_planning', 'social_life_balance', 'physical_affection',
+        // Family & values (Q16-Q25)
         'parents_relationship', 'holiday_obligations', 'financial_transparency', 'career_priority', 'household_division',
-        'religion_spirituality', 'political_views', 'life_goals', 'money_attitude', 'gender_preference',
+        'religion_spirituality', 'political_views', 'environmental_values',
+        'family_approval_importance', 'parental_role_expectations', 'traditional_modern_balance',
+        // Lifestyle (Q26-Q35)
         'living_location', 'pet_preference', 'exercise_habits', 'drinking_habits', 'smoking_status',
-        'travel_preference', 'food_preference', 'sleep_schedule', 'cleanliness', 'introvert_extrovert',
-        'personal_values_lifestyle', 'ideal_relationship_dynamic', 'future_life_vision', 'conflict_growth_philosophy', 'life_philosophy_happiness'
+        'travel_preference', 'food_preference', 'cleanliness', 'introvert_extrovert',
+        // Dealbreakers
+        'disability_acceptance', 'gender_preference', 'age_range_preference', 'divorce_status',
+        // Text questions (Q42-Q44) - appear last due to answer_type ordering
+        'personal_values_lifestyle', 'ideal_relationship_dynamic', 'conflict_growth_philosophy'
       ];
 
       // Transform answers to match interface
