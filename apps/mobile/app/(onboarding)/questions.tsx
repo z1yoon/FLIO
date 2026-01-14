@@ -64,12 +64,19 @@ export default function QuestionsScreen() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const currentQuestion = questions[currentQuestionIndex];
   const progress = questions.length > 0 ? (currentQuestionIndex + 1) / questions.length : 0;
+
+  // Check if current question has been answered
+  const currentQuestionAnswer = currentQuestion
+    ? answersContext.previous_answers.find(a => a.question_id === currentQuestion.id)
+    : null;
+  const isCurrentQuestionAnswered = !!currentQuestionAnswer;
 
 
   // Get authenticated user ID on mount
@@ -114,6 +121,14 @@ export default function QuestionsScreen() {
       const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
 
       console.log(`📊 Resuming profile completion: ${answeredCount} answers (${completionPercentage.toFixed(1)}%)`);
+
+      // Load previous answers into context
+      if (userProfile?.answers) {
+        setAnswersContext(prev => ({
+          ...prev,
+          previous_answers: userProfile.answers
+        }));
+      }
 
       // Check if profile is complete
       if (canStartMatching) {
@@ -309,7 +324,11 @@ export default function QuestionsScreen() {
     // Simulate TTS speaking
     setIsSpeaking(true);
     const timer = setTimeout(() => setIsSpeaking(false), 2000);
-    
+
+    // Clear selected answer and text input when question changes
+    setSelectedAnswer(null);
+    setTextAnswer('');
+
     return () => clearTimeout(timer);
   }, [currentQuestionIndex]);
 
@@ -333,10 +352,20 @@ export default function QuestionsScreen() {
   }, [isSpeaking]);
 
   const handleChoiceSelect = async (option: string) => {
-    if (isLoadingQuestion) return;
-    
+    // Don't allow re-answering already answered questions
+    if (isLoadingQuestion || isCurrentQuestionAnswered) return;
+
+    // Show visual feedback
+    setSelectedAnswer(option);
+
+    // Brief delay to show selection feedback
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     // Process the answer through AI service
     await processAnswerAndGetNext(option);
+
+    // Clear selection after processing
+    setSelectedAnswer(null);
   };
 
   const handleVoiceInput = async () => {
@@ -381,22 +410,24 @@ export default function QuestionsScreen() {
 
   const handleGoBack = () => {
     if (currentQuestionIndex > 0) {
-      // Find previous unanswered question
-      const answeredIds = new Set(answersContext.previous_answers.map(a => a.question_id));
-      let prevIndex = currentQuestionIndex - 1;
-
-      // Skip over answered questions when going back
-      while (prevIndex >= 0 && answeredIds.has(questions[prevIndex].id)) {
-        prevIndex--;
-      }
-
-      if (prevIndex >= 0) {
-        setCurrentQuestionIndex(prevIndex);
-      } else {
-        console.log('⚠️ No previous unanswered questions');
-      }
+      // Go to previous question (show all questions, answered or not)
+      setCurrentQuestionIndex(currentQuestionIndex - 1);
     } else {
       console.log('⚠️ Already at first question');
+    }
+  };
+
+  const handleGoForward = () => {
+    // Find next unanswered question
+    const answeredIds = new Set(answersContext.previous_answers.map(a => a.question_id));
+    const nextUnansweredIndex = questions.findIndex((q, idx) =>
+      idx > currentQuestionIndex && !answeredIds.has(q.id)
+    );
+
+    if (nextUnansweredIndex !== -1) {
+      setCurrentQuestionIndex(nextUnansweredIndex);
+    } else {
+      console.log('⚠️ No more unanswered questions');
     }
   };
 
@@ -440,17 +471,32 @@ export default function QuestionsScreen() {
         {/* Header with Back Button, Read All, and Account */}
         <View style={styles.headerControls}>
           <View style={styles.leftHeaderControls}>
-            {currentQuestionIndex > 0 && (() => {
-              // Check if there are any unanswered questions before current one
+            {currentQuestionIndex > 0 && (
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={handleGoBack}
+                activeOpacity={0.7}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="이전 질문"
+              >
+                <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            {isCurrentQuestionAnswered && (() => {
+              // Check if there are more unanswered questions ahead
               const answeredIds = new Set(answersContext.previous_answers.map(a => a.question_id));
-              const hasPreviousUnanswered = questions.slice(0, currentQuestionIndex).some(q => !answeredIds.has(q.id));
-              return hasPreviousUnanswered ? (
+              const hasNextUnanswered = questions.slice(currentQuestionIndex + 1).some(q => !answeredIds.has(q.id));
+              return hasNextUnanswered ? (
                 <TouchableOpacity
-                  style={styles.backButton}
-                  onPress={handleGoBack}
+                  style={styles.forwardButton}
+                  onPress={handleGoForward}
                   activeOpacity={0.7}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="다음 미답변 질문으로"
                 >
-                  <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+                  <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
               ) : null;
             })()}
@@ -539,7 +585,7 @@ export default function QuestionsScreen() {
         <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
           {currentQuestion ? (
             <>
-              <Text 
+              <Text
                 style={styles.categoryLabel}
                 accessible={true}
                 accessibilityRole="text"
@@ -555,6 +601,12 @@ export default function QuestionsScreen() {
               >
                 {currentQuestion.text}
               </Text>
+              {isCurrentQuestionAnswered && (
+                <View style={styles.answeredBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color="#4FD1C7" />
+                  <Text style={styles.answeredBadgeText}>답변 완료</Text>
+                </View>
+              )}
             </>
           ) : isLoadingQuestion ? (
             <>
@@ -572,36 +624,46 @@ export default function QuestionsScreen() {
         {/* Answer Options */}
         {currentQuestion && currentQuestion.type === 'choice' && currentQuestion.options && (
           <Animated.View style={[styles.optionsContainer, { opacity: fadeAnim }]}>
-            {currentQuestion.options.map((option, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.optionButton,
-                  isLoadingQuestion && styles.optionDisabled,
-                ]}
-                onPress={() => handleChoiceSelect(option)}
-                disabled={isLoadingQuestion}
-                activeOpacity={0.7}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel={`답변 선택: ${option}`}
-                accessibilityHint="이 답변을 선택하려면 두 번 탭하세요"
-              >
-                <Text
+            {currentQuestion.options.map((option, index) => {
+              const isSelected = selectedAnswer === option;
+              const isPreviouslyAnswered = isCurrentQuestionAnswered && currentQuestionAnswer?.answer_value === option;
+              const isHighlighted = isSelected || isPreviouslyAnswered;
+
+              return (
+                <TouchableOpacity
+                  key={index}
                   style={[
-                    styles.optionText,
-                    isLoadingQuestion && styles.optionTextDisabled,
+                    styles.optionButton,
+                    isHighlighted && styles.optionSelected,
+                    isLoadingQuestion && styles.optionDisabled,
+                    isCurrentQuestionAnswered && !isPreviouslyAnswered && styles.optionNotSelected,
                   ]}
+                  onPress={() => handleChoiceSelect(option)}
+                  disabled={isLoadingQuestion || isCurrentQuestionAnswered}
+                  activeOpacity={0.7}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={`답변 선택: ${option}${isPreviouslyAnswered ? ' (선택됨)' : ''}`}
+                  accessibilityHint={isCurrentQuestionAnswered ? '이미 답변한 질문입니다' : '이 답변을 선택하려면 두 번 탭하세요'}
                 >
-                  {option}
-                </Text>
-                {isLoadingQuestion && (
-                  <View style={styles.loadingOverlay}>
-                    <Text style={styles.loadingText}>처리중...</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.optionText,
+                      isHighlighted && styles.optionTextSelected,
+                      isLoadingQuestion && styles.optionTextDisabled,
+                      isCurrentQuestionAnswered && !isPreviouslyAnswered && styles.optionTextNotSelected,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                  {isLoadingQuestion && (
+                    <View style={styles.loadingOverlay}>
+                      <Text style={styles.loadingText}>처리중...</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </Animated.View>
         )}
 
@@ -609,67 +671,74 @@ export default function QuestionsScreen() {
         {currentQuestion && currentQuestion.type === 'text' && (
           <Animated.View style={[styles.openEndedContainer, { opacity: fadeAnim }]}>
             <View style={styles.textInputWrapper}>
-              {currentQuestion.placeholder && (
+              {currentQuestion.placeholder && !isCurrentQuestionAnswered && (
                 <Text style={styles.placeholderGuide}>
                   {currentQuestion.placeholder}
                 </Text>
               )}
               <TextInput
-                style={[styles.textInput, isLoadingQuestion && styles.textInputDisabled]}
-                value={textAnswer}
+                style={[
+                  styles.textInput,
+                  (isLoadingQuestion || isCurrentQuestionAnswered) && styles.textInputDisabled
+                ]}
+                value={isCurrentQuestionAnswered ? currentQuestionAnswer?.answer_value || '' : textAnswer}
                 onChangeText={setTextAnswer}
-                placeholder="터치해서 답변을 입력하세요..."
+                placeholder={isCurrentQuestionAnswered ? '' : '터치해서 답변을 입력하세요...'}
                 placeholderTextColor="rgba(255, 255, 255, 0.4)"
                 multiline
                 textAlignVertical="top"
-                editable={!isLoadingQuestion}
+                editable={!isLoadingQuestion && !isCurrentQuestionAnswered}
                 maxLength={currentQuestion.maxLength || 500}
                 accessible={true}
                 accessibilityLabel="개방형 질문 답변 입력"
-                accessibilityHint="여기에 자세한 답변을 입력하세요"
+                accessibilityHint={isCurrentQuestionAnswered ? '이미 답변한 질문입니다' : '여기에 자세한 답변을 입력하세요'}
               />
-              <View style={styles.textInputFooter}>
-                <Text style={styles.characterCount}>
-                  {textAnswer.length}/{currentQuestion.maxLength || 500}
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.submitTextButton,
-                    (!textAnswer.trim() || isLoadingQuestion) && styles.submitButtonDisabled
-                  ]}
-                  onPress={handleNext}
-                  disabled={!textAnswer.trim() || isLoadingQuestion}
-                  accessible={true}
-                  accessibilityRole="button"
-                  accessibilityLabel="답변 제출"
-                  accessibilityHint="작성한 답변을 제출하고 다음 질문으로 넘어갑니다"
-                >
-                  {isLoadingQuestion ? (
-                    <Text style={styles.submitButtonText}>처리중...</Text>
-                  ) : (
-                    <>
-                      <Text style={styles.submitButtonText}>다음</Text>
-                      <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
+              {!isCurrentQuestionAnswered && (
+                <View style={styles.textInputFooter}>
+                  <Text style={styles.characterCount}>
+                    {textAnswer.length}/{currentQuestion.maxLength || 500}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.submitTextButton,
+                      (!textAnswer.trim() || isLoadingQuestion) && styles.submitButtonDisabled
+                    ]}
+                    onPress={handleNext}
+                    disabled={!textAnswer.trim() || isLoadingQuestion}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel="답변 제출"
+                    accessibilityHint="작성한 답변을 제출하고 다음 질문으로 넘어갑니다"
+                  >
+                    {isLoadingQuestion ? (
+                      <Text style={styles.submitButtonText}>처리중...</Text>
+                    ) : (
+                      <>
+                        <Text style={styles.submitButtonText}>다음</Text>
+                        <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-            
+
             {/* Helpful Tips for Open-ended Questions */}
-            <View style={styles.helpTips}>
-              <Text style={styles.helpTipsTitle}>💡 작성 팁</Text>
-              <Text style={styles.helpTipsText}>
-                • 솔직하고 구체적으로 표현해주세요{'\n'}
-                • 본인의 경험이나 생각을 자유롭게 써주세요{'\n'}
-                • 더 나은 매칭을 위해 진실된 답변을 부탁드려요
-              </Text>
-            </View>
+            {!isCurrentQuestionAnswered && (
+              <View style={styles.helpTips}>
+                <Text style={styles.helpTipsTitle}>💡 작성 팁</Text>
+                <Text style={styles.helpTipsText}>
+                  • 솔직하고 구체적으로 표현해주세요{'\n'}
+                  • 본인의 경험이나 생각을 자유롭게 써주세요{'\n'}
+                  • 더 나은 매칭을 위해 진실된 답변을 부탁드려요
+                </Text>
+              </View>
+            )}
           </Animated.View>
         )}
 
         {/* Voice Input Button - Show when voice is enabled */}
-        {voiceEnabled && currentQuestion && currentQuestion.answer_type === 'text' && (
+        {voiceEnabled && currentQuestion && currentQuestion.answer_type === 'text' && !isCurrentQuestionAnswered && (
           <TouchableOpacity
             style={[styles.voiceButton, isListening && styles.voiceButtonActive]}
             onPress={handleVoiceInput}
@@ -742,6 +811,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.8)',
+  },
+  forwardButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4FD1C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   scrollContent: {
     paddingTop: 150,
@@ -849,6 +928,25 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     textAlign: 'center',
   },
+  answeredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(79, 209, 199, 0.2)',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#4FD1C7',
+    alignSelf: 'center',
+    gap: 6,
+  },
+  answeredBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   optionsContainer: {
     paddingHorizontal: 24,
     paddingBottom: 20,
@@ -863,8 +961,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.6)',
   },
   optionSelected: {
-    backgroundColor: 'rgba(79, 209, 199, 0.15)',
+    backgroundColor: 'rgba(79, 209, 199, 0.25)',
     borderColor: '#4FD1C7',
+    borderWidth: 3,
+  },
+  optionNotSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   optionText: {
     fontSize: 15,
@@ -872,8 +975,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   optionTextSelected: {
-    color: '#4FD1C7',
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  optionTextNotSelected: {
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   // Open-ended question styles
   openEndedContainer: {

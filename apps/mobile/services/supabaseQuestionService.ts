@@ -95,6 +95,8 @@ class SupabaseQuestionService {
           max_length
         `)
         .eq('is_active', true)
+        // Ensure static (choice) questions load first, text last
+        .order('answer_type', { ascending: true })
         .order('effectiveness_score', { ascending: false })
         .order('base_weight', { ascending: false });
 
