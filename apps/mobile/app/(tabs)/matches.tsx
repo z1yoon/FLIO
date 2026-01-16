@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { getItemAsync, setItemAsync } from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ import { aiQuestionService, MatchResult, MatchExplanation } from '../../services
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
 import { getCurrentUserId } from '../../services/supabase/client';
 import { supabaseQuestionService } from '../../services/supabaseQuestionService';
+import TrustBadge, { getTierFromScore } from '../../components/TrustBadge';
 
 const { width, height } = Dimensions.get('window');
 
@@ -45,7 +46,7 @@ export default function MatchesScreen() {
   const loadCachedMatches = async (userId: string) => {
     try {
       console.log(`🔍 Looking for cached matches with key: matches_${userId}`);
-      const cachedMatches = await SecureStore.getItemAsync(`matches_${userId}`);
+      const cachedMatches = await getItemAsync(`matches_${userId}`);
       
       if (cachedMatches) {
         const parsedMatches = JSON.parse(cachedMatches);
@@ -66,7 +67,7 @@ export default function MatchesScreen() {
   // Save matches to storage
   const saveCachedMatches = async (userId: string, matches: MatchResult[]) => {
     try {
-      await SecureStore.setItemAsync(`matches_${userId}`, JSON.stringify(matches));
+      await setItemAsync(`matches_${userId}`, JSON.stringify(matches));
       console.log(`💾 Cached ${matches.length} matches for user`);
     } catch (error) {
       console.error('❌ Failed to cache matches:', error);
@@ -371,11 +372,50 @@ export default function MatchesScreen() {
 
                 {/* Profile Info */}
                 <View style={styles.profileInfo}>
-                  <Text style={styles.profileName}>
-                    {match.name || `사용자 ${match.user_id.slice(0, 8)}`}
-                  </Text>
-                  {match.age && (
-                    <Text style={styles.profileAge}>{match.age}세</Text>
+                  <View style={styles.nameRow}>
+                    <Text style={styles.profileName}>
+                      {match.name || `사용자 ${match.user_id.slice(0, 8)}`}
+                    </Text>
+                    {match.age && (
+                      <Text style={styles.profileAge}>{match.age}세</Text>
+                    )}
+                  </View>
+
+                  {/* Trust Badge */}
+                  {match.trust_tier && (
+                    <View style={styles.trustBadgeContainer}>
+                      <TrustBadge tier={match.trust_tier} size="small" />
+                    </View>
+                  )}
+
+                  {/* Verification Indicators */}
+                  {match.verification_status && (
+                    <View style={styles.verificationIndicators}>
+                      {match.verification_status.id_verified && (
+                        <View style={styles.verificationBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color="#4FD1C7" />
+                          <Text style={styles.verificationText}>신분증</Text>
+                        </View>
+                      )}
+                      {match.verification_status.education_verified && (
+                        <View style={styles.verificationBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color="#4FD1C7" />
+                          <Text style={styles.verificationText}>학력</Text>
+                        </View>
+                      )}
+                      {match.verification_status.income_verified && (
+                        <View style={styles.verificationBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color="#4FD1C7" />
+                          <Text style={styles.verificationText}>소득</Text>
+                        </View>
+                      )}
+                      {match.verification_status.employment_verified && (
+                        <View style={styles.verificationBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color="#4FD1C7" />
+                          <Text style={styles.verificationText}>재직</Text>
+                        </View>
+                      )}
+                    </View>
                   )}
                 </View>
 
@@ -661,7 +701,12 @@ const styles = StyleSheet.create({
   },
   profileInfo: {
     flex: 1,
-    gap: 4,
+    gap: 6,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   profileName: {
     fontSize: 18,
@@ -671,6 +716,29 @@ const styles = StyleSheet.create({
   profileAge: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.7)',
+  },
+  trustBadgeContainer: {
+    marginTop: 4,
+  },
+  verificationIndicators: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  verificationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(79,209,199,0.15)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 4,
+  },
+  verificationText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#FFFFFF',
   },
   compatibilityBreakdown: {
     marginTop: 8,

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
+import { getItemAsync, setItemAsync, deleteItemAsync } from 'expo-secure-store';
 import { setupURLPolyfill } from 'react-native-url-polyfill';
 
 setupURLPolyfill();
@@ -10,13 +10,13 @@ const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 // Custom storage adapter for Expo SecureStore
 const ExpoSecureStoreAdapter = {
   getItem: async (key: string) => {
-    return SecureStore.getItemAsync(key);
+    return getItemAsync(key);
   },
   setItem: async (key: string, value: string) => {
-    await SecureStore.setItemAsync(key, value);
+    await setItemAsync(key, value);
   },
   removeItem: async (key: string) => {
-    await SecureStore.deleteItemAsync(key);
+    await deleteItemAsync(key);
   },
 };
 

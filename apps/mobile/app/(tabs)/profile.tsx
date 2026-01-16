@@ -16,6 +16,8 @@ import { router } from 'expo-router';
 import { supabaseQuestionService, UserProfile } from '../../services/supabaseQuestionService';
 import { getCurrentUserId } from '../../services/supabase/client';
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
+import { aiQuestionService } from '../../services/aiQuestionService';
+import TrustBadge, { getTierFromScore } from '../../components/TrustBadge';
 
 /**
  * Profile Screen
@@ -26,6 +28,7 @@ export default function ProfileScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [trustScore, setTrustScore] = useState<any>(null);
 
   const loadProfileData = async (isRefresh = false) => {
     try {
@@ -43,7 +46,7 @@ export default function ProfileScreen() {
 
       // Load user's complete profile from Supabase
       const profileData = await supabaseQuestionService.getUserProfile(userId);
-      
+
       if (profileData) {
         setUserProfile(profileData);
         console.log('✅ Profile data loaded successfully');
@@ -65,6 +68,18 @@ export default function ProfileScreen() {
             can_start_matching: false
           }
         });
+      }
+
+      // Load trust score
+      try {
+        const trustScoreData = await aiQuestionService.getTrustScore(userId);
+        if (trustScoreData) {
+          setTrustScore(trustScoreData);
+          console.log(`🔐 Trust score loaded: ${trustScoreData.trust_tier} (${(trustScoreData.total_trust_score * 100).toFixed(1)}%)`);
+        }
+      } catch (error) {
+        console.log('ℹ️ Trust score not available yet');
+        // Trust score is optional, don't show error to user
       }
 
     } catch (error) {
@@ -200,10 +215,10 @@ export default function ProfileScreen() {
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
             <View style={styles.statusIconContainer}>
-              <Ionicons 
-                name="person-circle" 
-                size={24} 
-                color="#4FD1C7" 
+              <Ionicons
+                name="person-circle"
+                size={24}
+                color="#4FD1C7"
               />
             </View>
             <View style={styles.statusInfo}>
@@ -214,6 +229,86 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        {/* Trust Score Card */}
+        {trustScore && (
+          <View style={styles.trustScoreCard}>
+            <View style={styles.trustScoreHeader}>
+              <View style={styles.trustScoreIconContainer}>
+                <Ionicons
+                  name="shield-checkmark"
+                  size={24}
+                  color="#4FD1C7"
+                />
+              </View>
+              <View style={styles.trustScoreInfo}>
+                <Text style={styles.trustScoreTitle}>신뢰도 점수</Text>
+                <Text style={styles.trustScorePercentage}>
+                  {(trustScore.total_trust_score * 100).toFixed(0)}%
+                </Text>
+              </View>
+              <TrustBadge tier={trustScore.trust_tier} size="medium" />
+            </View>
+
+            {/* Score Breakdown */}
+            <View style={styles.scoreBreakdown}>
+              <Text style={styles.breakdownTitle}>점수 구성</Text>
+
+              <View style={styles.scoreItem}>
+                <View style={styles.scoreItemLeft}>
+                  <Ionicons name="document-text" size={16} color="#4FD1C7" />
+                  <Text style={styles.scoreItemLabel}>문서 인증</Text>
+                </View>
+                <Text style={styles.scoreItemValue}>
+                  {(trustScore.document_score * 100).toFixed(0)}%
+                </Text>
+              </View>
+
+              <View style={styles.scoreItem}>
+                <View style={styles.scoreItemLeft}>
+                  <Ionicons name="checkmark-done" size={16} color="#4FD1C7" />
+                  <Text style={styles.scoreItemLabel}>일관성</Text>
+                </View>
+                <Text style={styles.scoreItemValue}>
+                  {(trustScore.consistency_score * 100).toFixed(0)}%
+                </Text>
+              </View>
+
+              <View style={styles.scoreItem}>
+                <View style={styles.scoreItemLeft}>
+                  <Ionicons name="trending-up" size={16} color="#4FD1C7" />
+                  <Text style={styles.scoreItemLabel}>행동 패턴</Text>
+                </View>
+                <Text style={styles.scoreItemValue}>
+                  {(trustScore.behavioral_score * 100).toFixed(0)}%
+                </Text>
+              </View>
+
+              <View style={styles.scoreItem}>
+                <View style={styles.scoreItemLeft}>
+                  <Ionicons name="list" size={16} color="#4FD1C7" />
+                  <Text style={styles.scoreItemLabel}>완성도</Text>
+                </View>
+                <Text style={styles.scoreItemValue}>
+                  {(trustScore.completeness_score * 100).toFixed(0)}%
+                </Text>
+              </View>
+            </View>
+
+            {/* Improve Trust Button */}
+            <TouchableOpacity
+              style={styles.improveTrustButton}
+              onPress={() => router.push('/(onboarding)/document-upload')}
+            >
+              <Ionicons name="arrow-up-circle" size={20} color="#FFFFFF" />
+              <Text style={styles.improveTrustButtonText}>신뢰도 높이기</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.trustScoreNote}>
+              문서 인증을 완료하여 더 많은 매칭 기회를 얻으세요
+            </Text>
+          </View>
+        )}
 
         {/* Answers Section */}
         <View style={styles.answersSection}>
@@ -345,6 +440,96 @@ const styles = StyleSheet.create({
   statusSubtitle: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.7)',
+  },
+  trustScoreCard: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(79,209,199,0.3)',
+  },
+  trustScoreHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  trustScoreIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(79,209,199,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trustScoreInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  trustScoreTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
+  },
+  trustScorePercentage: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#4FD1C7',
+  },
+  scoreBreakdown: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  breakdownTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  scoreItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  scoreItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scoreItemLabel: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  scoreItemValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4FD1C7',
+  },
+  improveTrustButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4FD1C7',
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 8,
+    marginBottom: 12,
+  },
+  improveTrustButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  trustScoreNote: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   answersSection: {
     paddingHorizontal: 20,
