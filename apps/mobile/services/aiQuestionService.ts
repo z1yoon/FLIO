@@ -501,7 +501,7 @@ class AIQuestionService {
   }> {
     try {
       const profile = await this.getUserProfile(userId);
-      
+
       if (profile) {
         return {
           answered: profile.total_answers,
@@ -509,7 +509,7 @@ class AIQuestionService {
           percentage: profile.profile_completion.completion_percentage
         };
       }
-      
+
       // Fallback: fetch total from backend if profile unavailable
       try {
         const statsResponse = await fetch(`${this.baseUrl}/questions/stats`);
@@ -534,6 +534,260 @@ class AIQuestionService {
         console.error('Failed to fetch question stats:', statsError);
       }
       return { answered: 0, total: 44, percentage: 0 }; // Updated default to 44
+    }
+  }
+
+  // ========================================
+  // Document Verification & Trust Score APIs
+  // ========================================
+
+  /**
+   * Upload document for OCR verification
+   */
+  async uploadDocumentForVerification(
+    userId: string,
+    documentType: string,
+    fileUrl: string
+  ): Promise<{
+    success: boolean;
+    document_id?: string;
+    verification_status?: string;
+    match_score?: number;
+    flags?: string[];
+    error?: string;
+  }> {
+    console.log('📤 Uploading document for verification:', documentType);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/verification/document/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          document_type: documentType,
+          file_url: fileUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Document uploaded successfully');
+      console.log(`📊 Verification status: ${data.verification_status}`);
+
+      return data;
+    } catch (error: any) {
+      console.error('Failed to upload document:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get verification status for a specific document
+   */
+  async getDocumentStatus(documentId: string): Promise<{
+    status: string;
+    match_score?: number;
+    flags?: string[];
+    error?: string;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/verification/document/${documentId}/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Status check failed: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('Failed to get document status:', error);
+      return {
+        status: 'error',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get overall verification status for a user
+   */
+  async getVerificationStatus(userId: string): Promise<{
+    id_verified: boolean;
+    education_verified: boolean;
+    income_verified: boolean;
+    employment_verified: boolean;
+    phone_verified: boolean;
+    total_documents_uploaded: number;
+    verified_documents_count: number;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/verification/status/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Verification status check failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Verification status: ${data.verified_documents_count}/${data.total_documents_uploaded} verified`);
+
+      return data;
+    } catch (error: any) {
+      console.error('Failed to get verification status:', error);
+      return {
+        id_verified: false,
+        education_verified: false,
+        income_verified: false,
+        employment_verified: false,
+        phone_verified: false,
+        total_documents_uploaded: 0,
+        verified_documents_count: 0,
+      };
+    }
+  }
+
+  /**
+   * Get user's trust score and tier
+   */
+  async getTrustScore(userId: string): Promise<{
+    user_id: string;
+    total_trust_score: number;
+    trust_tier: string;
+    document_score: number;
+    consistency_score: number;
+    behavioral_score: number;
+    completeness_score: number;
+    last_calculated_at: string;
+    calculation_details?: any;
+  } | null> {
+    console.log('🏆 Loading trust score for user:', userId);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/trust/score/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Trust score check failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Trust tier: ${data.trust_tier} (${(data.total_trust_score * 100).toFixed(1)}%)`);
+
+      return data;
+    } catch (error: any) {
+      console.error('Failed to get trust score:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get user's trust tier (simpler version)
+   */
+  async getTrustTier(userId: string): Promise<{
+    tier: string;
+    score: number;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/trust/tier/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        return { tier: 'unverified', score: 0 };
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get trust tier:', error);
+      return { tier: 'unverified', score: 0 };
+    }
+  }
+
+  /**
+   * Manually recalculate trust score
+   */
+  async recalculateTrustScore(userId: string): Promise<{
+    success: boolean;
+    new_score?: number;
+    new_tier?: string;
+    error?: string;
+  }> {
+    console.log('🔄 Recalculating trust score...');
+
+    try {
+      const response = await fetch(`${this.baseUrl}/trust/recalculate/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Recalculation failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ New trust tier: ${data.new_tier} (${(data.new_score * 100).toFixed(1)}%)`);
+
+      return data;
+    } catch (error: any) {
+      console.error('Failed to recalculate trust score:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get trust score history
+   */
+  async getTrustScoreHistory(userId: string): Promise<{
+    history: Array<{
+      score: number;
+      tier: string;
+      timestamp: string;
+    }>;
+  } | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/trust/history/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get trust score history:', error);
+      return null;
     }
   }
 
