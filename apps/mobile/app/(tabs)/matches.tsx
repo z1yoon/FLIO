@@ -19,7 +19,7 @@ import { router } from 'expo-router';
 
 import { aiQuestionService, MatchResult, MatchExplanation } from '../../services/aiQuestionService';
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
-import { getCurrentUserId } from '../../services/supabase/client';
+import { getCurrentUserId, supabase } from '../../services/supabase/client';
 import { supabaseQuestionService } from '../../services/supabaseQuestionService';
 import TrustBadge, { getTierFromScore } from '../../components/TrustBadge';
 
@@ -41,6 +41,67 @@ export default function MatchesScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
   const [hasLoadedMatches, setHasLoadedMatches] = useState(false);
+  const [currentTier, setCurrentTier] = useState<string>('pebble');
+  const [trustScore, setTrustScore] = useState<number>(0);
+  const [showTierFilter, setShowTierFilter] = useState(false);
+  const [selectedTiers, setSelectedTiers] = useState<string[]>([]);
+
+  // Get default tier preferences based on current tier
+  const getDefaultTierPreferences = (tier: string): string[] => {
+    const tierMap: Record<string, string[]> = {
+      diamond: ['diamond', 'coral', 'pearl', 'shell', 'pebble'],
+      coral: ['coral', 'pearl', 'shell', 'pebble'],
+      pearl: ['pearl', 'shell', 'pebble'],
+      shell: ['shell', 'pebble'],
+      pebble: ['pebble']
+    };
+    return tierMap[tier] || ['pebble'];
+  };
+
+  // Get available tiers based on current tier (can't select higher tiers)
+  const getAvailableTiers = (tier: string): string[] => {
+    return getDefaultTierPreferences(tier);
+  };
+
+  // Save tier preferences to database
+  const saveTierPreferences = async (tiers: string[]) => {
+    if (!currentUserId) return;
+
+    try {
+      await supabase
+        .from('profiles')
+        .update({ tier_preferences: tiers })
+        .eq('user_id', currentUserId);
+
+      console.log('✅ Tier preferences saved:', tiers);
+    } catch (error) {
+      console.error('❌ Failed to save tier preferences:', error);
+    }
+  };
+
+  // Handle tier filter toggle
+  const handleTierToggle = (tier: string) => {
+    setSelectedTiers(prev => {
+      if (prev.includes(tier)) {
+        // Don't allow deselecting all tiers
+        if (prev.length === 1) {
+          FLIOAlertAPI.alert('', '최소 1개 이상의 등급을 선택해야 합니다.');
+          return prev;
+        }
+        return prev.filter(t => t !== tier);
+      } else {
+        return [...prev, tier];
+      }
+    });
+  };
+
+  // Apply tier filter
+  const applyTierFilter = async () => {
+    setShowTierFilter(false);
+    await saveTierPreferences(selectedTiers);
+    // Reload matches with new tier filter
+    await loadMatches(true);
+  };
 
   // Load cached matches from storage
   const loadCachedMatches = async (userId: string) => {
@@ -80,9 +141,43 @@ export default function MatchesScreen() {
       const userId = await getCurrentUserId();
       if (userId) {
         setCurrentUserId(userId);
+
+        // Fetch trust score for verification banner
+        try {
+          const { data: trustData } = await supabase
+            .from('user_trust_scores')
+            .select('total_trust_score')
+            .eq('user_id', userId)
+            .single();
+
+          if (trustData) {
+            const score = trustData.total_trust_score * 100;
+            setTrustScore(score);
+            const tier = getTierFromScore(trustData.total_trust_score);
+            setCurrentTier(tier);
+
+            // Load user's tier preferences
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('tier_preferences')
+              .eq('user_id', userId)
+              .single();
+
+            if (profileData?.tier_preferences) {
+              setSelectedTiers(profileData.tier_preferences);
+            } else {
+              // Set default tier preferences based on current tier
+              const defaultPrefs = getDefaultTierPreferences(tier);
+              setSelectedTiers(defaultPrefs);
+            }
+          }
+        } catch (error) {
+          console.log('⚠️ Could not fetch trust score:', error);
+        }
+
         // Try to load cached matches first
         const hasCachedMatches = await loadCachedMatches(userId);
-        
+
         // If no cached matches, we need to load from API
         if (!hasCachedMatches) {
           console.log('🔄 No cached matches found - will fetch from API...');
@@ -107,6 +202,29 @@ export default function MatchesScreen() {
       }
 
       console.log('🔄 Loading AI-powered matches...');
+
+      // Check if user has completed profile questions
+      const userProfile = await supabaseQuestionService.getUserProfile(userId);
+      const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
+
+      if (!canStartMatching) {
+        console.log('⚠️ User has not completed profile - redirecting to questions');
+        setIsLoading(false);
+        setRefreshing(false);
+        FLIOAlertAPI.alert(
+          '',
+          'AI 매칭을 시작하려면 프로필 질문을 먼저 완성해주세요.',
+          [
+            {
+              text: '확인',
+              onPress: () => {
+                router.push('/(onboarding)/questions');
+              }
+            }
+          ]
+        );
+        return;
+      }
 
       // Check if user has profile embedding
       const embeddingStatus = await aiQuestionService.checkEmbeddingStatus(userId);
@@ -335,6 +453,30 @@ export default function MatchesScreen() {
           />
         }
       >
+        {/* Verification Benefits Banner (shown for users below Pearl tier) */}
+        {(currentTier === 'pebble' || currentTier === 'shell') && (
+          <TouchableOpacity
+            style={styles.verificationBanner}
+            onPress={() => router.push('/account')}
+            activeOpacity={0.9}
+          >
+            <View style={styles.bannerContent}>
+              <View style={styles.bannerIcon}>
+                <Ionicons name="shield-checkmark" size={24} color="#4FD1C7" />
+              </View>
+              <View style={styles.bannerText}>
+                <Text style={styles.bannerTitle}>
+                  💎 신뢰도를 높여 더 많은 매칭 기회를!
+                </Text>
+                <Text style={styles.bannerSubtitle}>
+                  문서 인증 완료 시 +35% 신뢰도 상승
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {matches.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="heart-outline" size={60} color="rgba(255,255,255,0.5)" />
@@ -1303,5 +1445,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  // Verification Banner Styles
+  verificationBanner: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 16,
+    backgroundColor: 'rgba(79,209,199,0.25)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(79,209,199,0.4)',
+    overflow: 'hidden',
+  },
+  bannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  bannerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(79,209,199,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerText: {
+    flex: 1,
+  },
+  bannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  bannerSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    lineHeight: 18,
   },
 });

@@ -35,6 +35,10 @@ class MatchResult(BaseModel):
     cultural_bonus: float
     name: Optional[str] = None
     age: Optional[int] = None
+    # Trust Score fields (Korean marriage agency style)
+    trust_tier: Optional[str] = None
+    trust_score: Optional[float] = None
+    verified_items: Optional[List[str]] = None
 
 class ProfileEmbeddingService:
     """
@@ -130,57 +134,117 @@ class ProfileEmbeddingService:
             logger.error(f"Failed to create embedding for user {user_id}: {e}")
             raise Exception(f"Profile embedding creation failed: {str(e)}")
     
-    async def find_compatible_matches(self, user_id: str, limit: int = 10, excluded_user_ids: List[str] = None) -> List[MatchResult]:
+    async def find_compatible_matches(
+        self,
+        user_id: str,
+        limit: int = 10,
+        excluded_user_ids: List[str] = None,
+        apply_trust_filter: bool = True,
+        tier_filter: List[str] = None
+    ) -> List[MatchResult]:
         """
         Find compatible matches for a user based on embedding similarity
-        Core matching algorithm for the dating app with dealbreaker filtering
-        Can exclude specific user IDs at database level for efficiency
+        Core matching algorithm with Korean marriage agency style trust filtering
+
+        Trust-Weighted Matching (결혼정보회사 스타일):
+        - Higher tier users only see similar or higher tier matches
+        - Trust score adds bonus to compatibility score
+        - Verified items displayed for transparency
+
+        Ocean Pearl Theme Tiers: 조약돌 → 조개 → 진주 → 산호 → 다이아
         """
         try:
             # 1. Get user's embedding
             user_embedding = await self._get_user_embedding(user_id)
             if not user_embedding:
                 raise ValueError(f"No embedding found for user {user_id}")
-            
-            # 2. Get user's dealbreaker questions
+
+            # 2. Get user's trust tier for filtering (Korean marriage agency style)
+            user_trust_tier = 'pebble'  # Default to pebble (Ocean Pearl Theme)
+            allowed_tiers = tier_filter if tier_filter else ['pebble', 'shell', 'pearl', 'coral', 'diamond']
+
+            if apply_trust_filter and not tier_filter:
+                try:
+                    from .trust_score_service import trust_score_service
+                    user_trust = await trust_score_service.get_trust_score(user_id)
+                    if user_trust:
+                        user_trust_tier = user_trust.trust_tier
+                        allowed_tiers = await trust_score_service.get_minimum_tier_for_matching(user_trust_tier)
+                        logger.info(f"User {user_id} trust tier: {user_trust_tier}, can see: {allowed_tiers}")
+                except Exception as e:
+                    logger.warning(f"Trust tier lookup failed, using default: {e}")
+
+            # 3. Get user's dealbreaker questions
             user_dealbreakers = await self._get_dealbreakers(user_id)
             logger.info(f"User {user_id} has {len(user_dealbreakers)} dealbreakers")
-            
-            # 3. Find similar profiles using Supabase vector search (exclude rejected users at DB level)
+
+            # 4. Find similar profiles using Supabase vector search (exclude rejected users at DB level)
             similar_profiles = await self._vector_similarity_search(user_id, user_embedding, limit * 5, excluded_user_ids)
-            
-            # 4. Filter by dealbreakers and calculate compatibility scores
+
+            # 5. Filter by dealbreakers, trust tier, and calculate compatibility scores
             match_results = []
             for profile in similar_profiles:
                 # Check dealbreaker compatibility
                 if not await self._check_dealbreaker_compatibility(user_id, profile['user_id'], user_dealbreakers):
                     logger.info(f"Filtered out {profile.get('name')} due to dealbreaker mismatch")
                     continue
-                
+
+                # Get match's trust info
+                match_trust_tier = 'unverified'
+                match_trust_score = 0.0
+                match_verified_items = []
+
+                if apply_trust_filter:
+                    try:
+                        from .trust_score_service import trust_score_service
+                        match_trust = await trust_score_service.get_trust_score(profile['user_id'])
+                        if match_trust:
+                            match_trust_tier = match_trust.trust_tier
+                            match_trust_score = match_trust.total_trust_score
+
+                        # Filter by trust tier (Korean marriage agency style)
+                        if match_trust_tier not in allowed_tiers:
+                            logger.info(f"Filtered out {profile.get('name')} due to trust tier: {match_trust_tier} not in {allowed_tiers}")
+                            continue
+
+                        # Get verified items for display
+                        match_summary = await trust_score_service.get_trust_summary(profile['user_id'])
+                        match_verified_items = match_summary.verified_items
+                    except Exception as e:
+                        logger.warning(f"Trust info lookup failed for match: {e}")
+
                 logger.info(f"Processing profile: {profile}")
                 compatibility_score = await self._calculate_compatibility(user_id, profile['user_id'])
-                
+
                 # Calculate exact match percentage (not weighted) for filtering
                 exact_match_rate = await self._calculate_exact_match_rate(user_id, profile['user_id'])
-                
+
                 # Filter out matches with less than 50% exact question matches
-                # Static questions are fundamental for compatibility - embedding similarity alone is not enough
                 if exact_match_rate < 0.5:
                     logger.info(f"Filtered out {profile.get('name')} due to low exact match rate: {exact_match_rate*100:.1f}% (minimum 50% required)")
                     continue
-                
+
+                # Add trust bonus to final score (10% weight)
+                base_score = compatibility_score['total_score']
+                trust_bonus = match_trust_score * 0.1
+                final_score = min(1.0, base_score * 0.9 + trust_bonus)
+
                 match_result = MatchResult(
                     user_id=profile['user_id'],
-                    compatibility_score=compatibility_score['total_score'],
+                    compatibility_score=final_score,
                     similarity_score=compatibility_score['similarity_score'],
                     cultural_bonus=compatibility_score['cultural_bonus'],
                     name=profile.get('name'),
-                    age=profile.get('age')
+                    age=profile.get('age'),
+                    # Trust fields (Korean marriage agency style)
+                    trust_tier=match_trust_tier,
+                    trust_score=match_trust_score,
+                    verified_items=match_verified_items
                 )
-                logger.info(f"Match result: name={match_result.name}, age={match_result.age}, exact_match={exact_match_rate*100:.1f}%")
+                logger.info(f"Match result: name={match_result.name}, trust_tier={match_trust_tier}, exact_match={exact_match_rate*100:.1f}%")
                 match_results.append(match_result)
-            
-            # 5. Sort by compatibility and return top matches
+
+            # 6. Sort by compatibility (includes trust bonus) and return top matches
             match_results.sort(key=lambda x: x.compatibility_score, reverse=True)
             return match_results[:limit]
             

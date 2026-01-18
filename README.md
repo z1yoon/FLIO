@@ -198,9 +198,9 @@ Korean text → English translation before AI processing:
 │  ┌────────────────────────────────────┐ │
 │  │  Trust Score Service               │ │
 │  │  OCR Verification Service          │ │
-│  │  NLI Consistency Service           │ │
-│  │  Behavioral Tracking Service       │ │
-│  │  Profile Embedding Service         │ │
+│  │  NLI Consistency Service           │ │ Uses GPT-4o-mini to detect contradictions
+│  │  Behavioral Tracking Service       │ │ Monitors profile changes for suspicious activity
+│  │  Profile Embedding Service         │ │ Creates embeddings for semantic matching (uses Azure Translator)
 │  └────────────────────────────────────┘ │
 └────────┬────────────────────────────────┘
          │

@@ -62,26 +62,16 @@ export default function RootLayout() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔄 Auth state changed:', event);
-        
+
         if (event === 'SIGNED_OUT' || !session) {
           console.log('🚫 User signed out - redirecting to landing');
           router.replace('/');
         } else if (event === 'SIGNED_IN' && session) {
-          console.log('✅ User signed in - checking profile');
-          // Re-check profile completion when user signs in
-          try {
-            const userProfile = await supabaseQuestionService.getUserProfile(session.user.id);
-            const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
-            
-            if (canStartMatching) {
-              router.replace('/(tabs)/matches');
-            } else {
-              router.replace('/(onboarding)/questions');
-            }
-          } catch (error) {
-            console.error('❌ Profile check failed on sign in:', error);
-            router.replace('/(onboarding)/questions');
-          }
+          console.log('✅ User signed in');
+          // Do NOT auto-navigate during onboarding
+          // The onboarding flow handles its own navigation (password-setup → face-verification → avatar-intro → questions)
+          // Only auto-navigate if user logs in from the landing page
+          console.log('ℹ️ SIGNED_IN event during onboarding - letting onboarding flow control navigation');
         }
       }
     );

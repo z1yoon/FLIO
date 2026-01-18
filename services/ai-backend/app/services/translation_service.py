@@ -58,8 +58,8 @@ class TranslationService:
             # Translate Korean to English
             response = self.client.translate(
                 body=[{"text": korean_text}],
-                from_language="ko",
-                to_language="en"
+                from_parameter="ko",
+                to=["en"]
             )
             
             if response and len(response) > 0:
@@ -107,8 +107,8 @@ class TranslationService:
             # Translate batch
             response = self.client.translate(
                 body=body,
-                from_language="ko",
-                to_language="en"
+                from_parameter="ko",
+                to=["en"]
             )
             
             if not response:
@@ -157,8 +157,8 @@ class TranslationService:
             # Translate English to Korean
             response = self.client.translate(
                 body=[{"text": english_text}],
-                from_language="en",
-                to_language="ko"
+                from_parameter="en",
+                to=["ko"]
             )
             
             if response and len(response) > 0:

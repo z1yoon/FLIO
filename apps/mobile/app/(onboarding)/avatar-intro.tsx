@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import * as Speech from 'expo-speech';
 import { AccessibilityInfo } from 'react-native';
+import { supabaseQuestionService } from '../../services/supabaseQuestionService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -112,19 +113,55 @@ export default function AvatarIntroScreen() {
   };
 
 
-  const handleNext = () => {
-    // Navigate to questions with all user data
-    const questionParams = new URLSearchParams({
-      userId: userId,
-      name: userName,
-      age: userAge,
-      gender: userGender,
-      birthDate: params.birthDate as string,
-      phone: params.phone as string,
-      ci: params.ci as string,
-      di: params.di as string
-    });
-    router.push(`/(onboarding)/questions?${questionParams.toString()}`);
+  const handleNext = async () => {
+    try {
+      // Check if user has already completed questions before navigating
+      const userProfile = await supabaseQuestionService.getUserProfile(userId);
+      const canStartMatching = userProfile?.profile_completion.can_start_matching || false;
+
+      if (canStartMatching) {
+        // User already completed questions - go directly to complete screen
+        console.log('✅ Questions already completed - navigating to complete screen');
+        router.replace({
+          pathname: '/(onboarding)/complete',
+          params: {
+            userId: userId,
+            name: userName,
+            age: userAge,
+            gender: userGender,
+            hasAIProfile: 'true'
+          }
+        });
+        return;
+      }
+
+      // User needs to answer questions - navigate to questions screen
+      const questionParams = new URLSearchParams({
+        userId: userId,
+        name: userName,
+        age: userAge,
+        gender: userGender,
+        birthDate: params.birthDate as string,
+        phone: params.phone as string,
+        ci: params.ci as string,
+        di: params.di as string
+      });
+      router.push(`/(onboarding)/questions?${questionParams.toString()}`);
+    } catch (error) {
+      console.error('Error checking question completion:', error);
+      // On error, proceed to questions screen as normal
+      const questionParams = new URLSearchParams({
+        userId: userId,
+        name: userName,
+        age: userAge,
+        gender: userGender,
+        birthDate: params.birthDate as string,
+        phone: params.phone as string,
+        ci: params.ci as string,
+        di: params.di as string
+      });
+      router.push(`/(onboarding)/questions?${questionParams.toString()}`);
+    }
   };
 
   const handleGoBack = () => {

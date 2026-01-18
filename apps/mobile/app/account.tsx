@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +15,8 @@ import { router } from 'expo-router';
 
 import { getCurrentUserId, supabase } from '../services/supabase/client';
 import { FLIOAlertAPI } from '../components/FLIOAlert';
+import VerificationCenter from '../components/VerificationCenter';
+import TrustBadge, { getTierFromScore } from '../components/TrustBadge';
 
 /**
  * User Account Screen
@@ -22,22 +25,52 @@ import { FLIOAlertAPI } from '../components/FLIOAlert';
 export default function AccountScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [showVerificationCenter, setShowVerificationCenter] = useState(false);
+  const [trustScore, setTrustScore] = useState(0);
+  const [currentTier, setCurrentTier] = useState<'pebble' | 'shell' | 'pearl' | 'coral' | 'diamond'>('pebble');
+  const [verifiedDocuments, setVerifiedDocuments] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
         const userId = await getCurrentUserId();
         setCurrentUserId(userId);
-        
+
         const { data: { user } } = await supabase.auth.getUser();
         if (user?.email) {
           setUserEmail(user.email);
+        }
+
+        // Fetch trust score
+        if (userId) {
+          const { data: trustData } = await supabase
+            .from('user_trust_scores')
+            .select('total_trust_score')
+            .eq('user_id', userId)
+            .single();
+
+          if (trustData) {
+            const score = Math.round(trustData.total_trust_score * 100);
+            setTrustScore(score);
+            setCurrentTier(getTierFromScore(trustData.total_trust_score));
+          }
+
+          // Fetch verified documents
+          const { data: docsData } = await supabase
+            .from('user_documents')
+            .select('document_type')
+            .eq('user_id', userId)
+            .eq('verification_status', 'verified');
+
+          if (docsData) {
+            setVerifiedDocuments(docsData.map(d => d.document_type));
+          }
         }
       } catch (error) {
         console.error('❌ Failed to fetch user info:', error);
       }
     };
-    
+
     fetchUserInfo();
   }, []);
 
@@ -68,6 +101,26 @@ export default function AccountScreen() {
 
   const goBack = () => {
     router.back();
+  };
+
+  const handleVerifyDocument = (documentType: string) => {
+    setShowVerificationCenter(false);
+    FLIOAlertAPI.alert(
+      '문서 인증',
+      `${documentType} 인증 기능은 곧 추가될 예정입니다.`,
+      [{ text: '확인' }]
+    );
+  };
+
+  const getTierKoreanName = (tier: string) => {
+    const names: Record<string, string> = {
+      pebble: '조약돌',
+      shell: '조개',
+      pearl: '진주',
+      coral: '산호',
+      diamond: '다이아'
+    };
+    return names[tier] || '조약돌';
   };
 
   const menuItems = [
@@ -141,6 +194,61 @@ export default function AccountScreen() {
           </View>
         </View>
 
+        {/* Verification Card */}
+        <TouchableOpacity
+          style={styles.verificationCard}
+          onPress={() => setShowVerificationCenter(true)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.verificationHeader}>
+            <View style={styles.verificationTitleRow}>
+              <Text style={styles.verificationTitle}>신뢰도 인증</Text>
+              <TrustBadge tier={currentTier} size="small" />
+            </View>
+            <TouchableOpacity
+              style={styles.verificationInfoButton}
+              onPress={() => setShowVerificationCenter(true)}
+            >
+              <Ionicons name="information-circle-outline" size={20} color="#4FD1C7" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.trustScoreRow}>
+            <Text style={styles.trustScoreLabel}>현재 신뢰도</Text>
+            <Text style={styles.trustScoreValue}>{trustScore}%</Text>
+          </View>
+
+          <View style={styles.progressBarContainer}>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${trustScore}%` }
+                ]}
+              />
+            </View>
+          </View>
+
+          <View style={styles.verificationStatsRow}>
+            <View style={styles.verificationStat}>
+              <Ionicons name="shield-checkmark" size={16} color="#4FD1C7" />
+              <Text style={styles.verificationStatText}>
+                {verifiedDocuments.length}개 인증완료
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
+          </View>
+
+          {trustScore < 80 && (
+            <View style={styles.upgradeHint}>
+              <Ionicons name="arrow-up-circle" size={16} color="#00FFC8" />
+              <Text style={styles.upgradeHintText}>
+                문서 인증으로 신뢰도를 높이세요
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
         {/* Menu Items */}
         <View style={styles.menuSection}>
           {menuItems.map((item, index) => (
@@ -174,6 +282,22 @@ export default function AccountScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Verification Center Modal */}
+      <Modal
+        visible={showVerificationCenter}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowVerificationCenter(false)}
+      >
+        <VerificationCenter
+          currentTier={currentTier}
+          trustScore={trustScore}
+          verifiedDocuments={verifiedDocuments}
+          onVerifyDocument={handleVerifyDocument}
+          onClose={() => setShowVerificationCenter(false)}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -299,5 +423,96 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#FF6B6B',
+  },
+  // Verification Card Styles
+  verificationCard: {
+    backgroundColor: 'rgba(79,209,199,0.2)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(79,209,199,0.3)',
+  },
+  verificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  verificationTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  verificationTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  verificationInfoButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(79,209,199,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trustScoreRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  trustScoreLabel: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  trustScoreValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#4FD1C7',
+  },
+  progressBarContainer: {
+    marginBottom: 16,
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#4FD1C7',
+    borderRadius: 3,
+  },
+  verificationStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  verificationStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  verificationStatText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '500',
+  },
+  upgradeHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  upgradeHintText: {
+    fontSize: 13,
+    color: '#00FFC8',
+    fontWeight: '600',
   },
 });

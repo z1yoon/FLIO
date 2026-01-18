@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import services and routers
-from app.routers import questions, matching, auth, voice
+from app.routers import questions, matching, auth, voice, trust, verification, profiles
 from app.services.azure_openai_service import azure_openai_service
 from app.models.database import get_supabase_client
 
@@ -80,8 +80,11 @@ app.add_middleware(
 # Include routers
 app.include_router(questions.router, prefix="/api/v1/questions", tags=["Questions & Answers"])
 app.include_router(matching.router, prefix="/api/v1/matching", tags=["Profile Matching"])
+app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profile Management"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(voice.router, prefix="/api/v1/voice", tags=["Voice Processing"])
+app.include_router(trust.router, prefix="/api/v1/trust", tags=["Trust Score System"])
+app.include_router(verification.router, prefix="/api/v1/verification", tags=["Document Verification"])
 logger.info("Routers included successfully")
 
 
@@ -126,7 +129,7 @@ async def health_check():
                 }
             },
             "features": [
-                "✅ Korean compatibility questions (40 questions)",
+                "✅ Korean compatibility questions (44 questions)",
                 "✅ Azure OpenAI text analysis",
                 "✅ Profile embedding generation", 
                 "✅ Similarity-based matching",

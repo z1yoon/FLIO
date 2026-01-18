@@ -11,6 +11,8 @@ from datetime import datetime
 
 from ..services.profile_embedding_service import profile_embedding_service
 from ..services.azure_openai_service import azure_openai_service
+from ..models.database import get_supabase_client
+from ..middleware.behavioral_logging import log_match_action
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -113,22 +115,91 @@ async def get_embedding_status(user_id: str):
 async def find_matches(
     user_id: str,
     limit: int = Query(default=10, ge=1, le=50, description="Number of matches to return"),
-    min_compatibility: float = Query(default=0.3, ge=0.0, le=1.0, description="Minimum compatibility score")
+    min_compatibility: float = Query(default=0.3, ge=0.0, le=1.0, description="Minimum compatibility score"),
+    tier_filter: Optional[List[str]] = Query(default=None, description="Filter matches by tiers (e.g., ['pearl', 'shell'])")
 ):
     """
     Find compatible matches for a user based on profile similarity
-    
+
+    Enforces daily match limits based on trust tier (Ocean Pearl Theme):
+    - Diamond (다이아): Unlimited
+    - Coral (산호): 20/day
+    - Pearl (진주): 10/day
+    - Shell (조개): 5/day
+    - Pebble (조약돌): 3/day
+
     - **user_id**: User's unique identifier
     - **limit**: Maximum number of matches to return (1-50)
     - **min_compatibility**: Minimum compatibility score (0.0-1.0)
+    - **tier_filter**: Optional list of tiers to match with (defaults to user's tier preferences)
     """
     try:
-        # Find compatible matches
-        match_results = await profile_embedding_service.find_compatible_matches(user_id, limit * 2)
-        
+        supabase = get_supabase_client()
+
+        # Check daily match limit using database function
+        limit_check = supabase.rpc('can_view_more_matches', {'p_user_id': user_id}).execute()
+
+        if not limit_check.data:
+            raise HTTPException(status_code=500, detail="Failed to check daily match limit")
+
+        limit_info = limit_check.data
+
+        # If user has reached their daily limit, return error with upgrade info
+        if not limit_info['can_view']:
+            # Ocean Pearl Theme tier upgrade map
+            tier_upgrade_map = {
+                'pebble': 'shell',
+                'shell': 'pearl',
+                'pearl': 'coral',
+                'coral': 'diamond',
+                'unverified': 'shell',  # Legacy support
+                'bronze': 'pearl',      # Legacy support
+                'silver': 'coral',      # Legacy support
+                'gold': 'diamond'       # Legacy support
+            }
+            tier_korean_names = {
+                'pebble': '조약돌',
+                'shell': '조개',
+                'pearl': '진주',
+                'coral': '산호',
+                'diamond': '다이아'
+            }
+            current_tier = limit_info['trust_tier']
+            next_tier = tier_upgrade_map.get(current_tier, 'diamond')
+
+            raise HTTPException(
+                status_code=429,  # Too Many Requests
+                detail={
+                    "error": "daily_limit_reached",
+                    "message": "일일 매칭 조회 한도에 도달했습니다",
+                    "current_tier": current_tier,
+                    "daily_limit": limit_info['daily_limit'],
+                    "daily_count": limit_info['daily_count'],
+                    "remaining": 0,
+                    "upgrade_suggestion": {
+                        "next_tier": next_tier,
+                        "next_tier_korean": tier_korean_names.get(next_tier, '다이아'),
+                        "next_tier_limit": {
+                            'shell': 5,
+                            'pearl': 10,
+                            'coral': 20,
+                            'diamond': '무제한'
+                        }.get(next_tier, '무제한'),
+                        "message": f"{tier_korean_names.get(next_tier, '다이아')} 등급으로 업그레이드하여 더 많은 매칭을 확인하세요"
+                    }
+                }
+            )
+
+        # Find compatible matches with optional tier filtering
+        match_results = await profile_embedding_service.find_compatible_matches(
+            user_id,
+            limit * 2,
+            tier_filter=tier_filter
+        )
+
         # Filter by minimum compatibility
         filtered_matches = [
-            match for match in match_results 
+            match for match in match_results
             if match.compatibility_score >= min_compatibility
         ]
         

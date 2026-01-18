@@ -144,7 +144,7 @@ async def get_initial_questions(user_id: Optional[str] = None, language: str = "
         if user_id:
             result = get_supabase_client().rpc('get_questions_for_user', {
                 'p_user_id': user_id,
-                'p_limit': 40
+                'p_limit': 44
             }).execute()
             
             if result.data:
