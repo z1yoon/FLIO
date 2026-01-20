@@ -77,7 +77,7 @@ const DOCUMENT_TYPES = [
     id: 'id',
     name: '신분증 인증',
     icon: 'card-outline' as const,
-    trustBoost: 35,
+    trustBoost: 8.75,
     description: '정부 발급 신분증 확인',
     color: '#4FD1C7'
   },
@@ -85,7 +85,7 @@ const DOCUMENT_TYPES = [
     id: 'education',
     name: '학력 인증',
     icon: 'school-outline' as const,
-    trustBoost: 15,
+    trustBoost: 8.75,
     description: '졸업증명서 확인',
     color: '#7EDDD9'
   },
@@ -93,7 +93,7 @@ const DOCUMENT_TYPES = [
     id: 'income',
     name: '소득 인증',
     icon: 'cash-outline' as const,
-    trustBoost: 20,
+    trustBoost: 8.75,
     description: '소득증명서 확인',
     color: '#4FD1C7'
   },
@@ -101,7 +101,7 @@ const DOCUMENT_TYPES = [
     id: 'employment',
     name: '재직 인증',
     icon: 'briefcase-outline' as const,
-    trustBoost: 15,
+    trustBoost: 8.75,
     description: '재직증명서 확인',
     color: '#7EDDD9'
   }
@@ -209,7 +209,13 @@ export default function VerificationCenter({
                 styles.documentCard,
                 isVerified && styles.documentCardVerified
               ]}
-              onPress={() => !isVerified && onVerifyDocument(doc.id)}
+              onPress={() => {
+                console.log('🔘 Document card pressed:', doc.id, 'isVerified:', isVerified);
+                if (!isVerified) {
+                  console.log('✅ Calling onVerifyDocument for:', doc.id);
+                  onVerifyDocument(doc.id);
+                }
+              }}
               disabled={isVerified}
             >
               <View style={styles.documentIcon}>
@@ -230,10 +236,7 @@ export default function VerificationCenter({
                     <Text style={styles.verifiedText}>인증완료</Text>
                   </View>
                 ) : (
-                  <View style={styles.boostBadge}>
-                    <Text style={styles.boostText}>+{doc.trustBoost}%</Text>
-                    <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-                  </View>
+                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
                 )}
               </View>
             </TouchableOpacity>

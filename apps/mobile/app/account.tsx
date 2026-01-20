@@ -104,11 +104,17 @@ export default function AccountScreen() {
   };
 
   const handleVerifyDocument = (documentType: string) => {
-    setShowVerificationCenter(false);
+    console.log('📄 Document verification clicked:', documentType);
+    // Show alert without closing modal - avoid modal-over-modal conflict
     FLIOAlertAPI.alert(
       '문서 인증',
       `${documentType} 인증 기능은 곧 추가될 예정입니다.`,
-      [{ text: '확인' }]
+      [{
+        text: '확인',
+        onPress: () => {
+          console.log('✅ Alert dismissed');
+        }
+      }]
     );
   };
 
@@ -129,6 +135,13 @@ export default function AccountScreen() {
       title: '프로필 보기',
       subtitle: '내 답변 확인 및 수정',
       onPress: () => router.push('/(tabs)/profile'),
+    },
+    {
+      icon: 'diamond-outline',
+      title: '등급 & 업그레이드',
+      subtitle: '요금제 확인 및 등급 업그레이드',
+      onPress: () => router.push('/tier'),
+      highlight: true,
     },
     {
       icon: 'settings-outline',
@@ -247,6 +260,16 @@ export default function AccountScreen() {
               </Text>
             </View>
           )}
+
+          <TouchableOpacity
+            style={styles.tierUpgradeButton}
+            onPress={() => router.push('/tier')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="diamond-outline" size={18} color="#4FD1C7" />
+            <Text style={styles.tierUpgradeButtonText}>등급 보기</Text>
+            <Ionicons name="arrow-forward" size={16} color="#4FD1C7" />
+          </TouchableOpacity>
         </TouchableOpacity>
 
         {/* Menu Items */}
@@ -254,15 +277,30 @@ export default function AccountScreen() {
           {menuItems.map((item, index) => (
             <TouchableOpacity
               key={index}
-              style={styles.menuItem}
+              style={[
+                styles.menuItem,
+                item.highlight && styles.menuItemHighlight,
+              ]}
               onPress={item.onPress}
               activeOpacity={0.7}
             >
-              <View style={styles.menuIcon}>
-                <Ionicons name={item.icon as any} size={24} color="#4FD1C7" />
+              <View style={[
+                styles.menuIcon,
+                item.highlight && styles.menuIconHighlight,
+              ]}>
+                <Ionicons
+                  name={item.icon as any}
+                  size={24}
+                  color='#4FD1C7'
+                />
               </View>
               <View style={styles.menuContent}>
-                <Text style={styles.menuTitle}>{item.title}</Text>
+                <Text style={[
+                  styles.menuTitle,
+                  item.highlight && styles.menuTitleHighlight,
+                ]}>
+                  {item.title}
+                </Text>
                 <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
@@ -287,7 +325,7 @@ export default function AccountScreen() {
       <Modal
         visible={showVerificationCenter}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="fullScreen"
         onRequestClose={() => setShowVerificationCenter(false)}
       >
         <VerificationCenter
@@ -405,6 +443,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.7)',
   },
+  menuItemHighlight: {
+    backgroundColor: 'rgba(79,209,199,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(79,209,199,0.3)',
+  },
+  menuIconHighlight: {
+    backgroundColor: 'rgba(79,209,199,0.2)',
+  },
+  menuTitleHighlight: {
+    color: '#FFFFFF',
+  },
   logoutSection: {
     marginBottom: 40,
   },
@@ -514,5 +563,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#00FFC8',
     fontWeight: '600',
+  },
+  tierUpgradeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(79,209,199,0.3)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(79,209,199,0.4)',
+  },
+  tierUpgradeButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

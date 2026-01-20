@@ -51,7 +51,19 @@
       "mcp__filesystem__list_allowed_directories",
       "mcp__supabase__execute_sql",
       "mcp__supabase__list_migrations",
-      "mcp__supabase__apply_migration"
+      "mcp__supabase__apply_migration",
+      "Read(//var/folders/yk/bhdsdrgs6ksdh71rmw9b4l180000gn/T/TemporaryItems/NSIRD_screencaptureui_4l9wkX/**)",
+      "Read(//var/folders/yk/bhdsdrgs6ksdh71rmw9b4l180000gn/T/TemporaryItems/NSIRD_screencaptureui_UvkwQR/**)",
+      "Bash(docker-compose exec:*)",
+      "Bash(brew install:*)",
+      "Bash(supabase init:*)",
+      "Bash(supabase link:*)",
+      "Bash(supabase login:*)",
+      "Bash(supabase db:*)",
+      "Bash(supabase migration repair:*)",
+      "Bash(supabase migration:*)",
+      "Read(//var/folders/yk/bhdsdrgs6ksdh71rmw9b4l180000gn/T/TemporaryItems/NSIRD_screencaptureui_51qwmU/**)",
+      "Read(//var/folders/yk/bhdsdrgs6ksdh71rmw9b4l180000gn/T/TemporaryItems/NSIRD_screencaptureui_cyC8Nc/**)"
     ],
     "deny": []
   },

@@ -86,6 +86,7 @@ export default function QuestionsScreen() {
       if (currentUserId) {
         setUserId(currentUserId);
         setAnswersContext(prev => ({ ...prev, user_id: currentUserId }));
+
         // Load questions after getting user ID
         loadInitialQuestions(currentUserId);
       } else if (params.userId) {

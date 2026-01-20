@@ -102,53 +102,128 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check for monitoring"""
+    """Detailed health check for monitoring all Azure services"""
     try:
-        # Check Azure OpenAI connectivity
-        azure_status = "azure_openai" in services
-        
-        # Check Supabase connectivity
-        supabase_status = "supabase" in services
-        
-        # Overall health
-        overall_healthy = azure_status and supabase_status
-        
-        return {
-            "status": "healthy" if overall_healthy else "degraded",
-            "timestamp": __import__('datetime').datetime.now().isoformat(),
-            "services": {
-                "azure_openai": {
-                    "status": "connected" if azure_status else "disconnected",
-                    "embedding_model": "text-embedding-3-small",
-                    "chat_model": "gpt-4o-mini",
-                    "features": ["embeddings", "chat_completion", "answer_analysis"]
-                },
-                "supabase": {
-                    "status": "connected" if supabase_status else "disconnected",
-                    "features": ["questions_db", "user_answers", "profile_embeddings"]
+        from datetime import datetime
+
+        # 1. Check Azure OpenAI connectivity with actual connection test
+        azure_openai_health = {"status": "disconnected", "error": None}
+        if "azure_openai" in services:
+            try:
+                connection_test = await azure_openai_service.test_connection()
+                azure_openai_health = {
+                    "status": connection_test.get("status", "disconnected"),
+                    "embedding_model": os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-large"),
+                    "chat_model": os.getenv("AZURE_OPENAI_CHAT_MODEL", "gpt-4o-mini"),
+                    "whisper_model": os.getenv("AZURE_OPENAI_WHISPER_MODEL", "whisper-1"),
+                    "embedding_available": connection_test.get("embedding_available", False),
+                    "chat_available": connection_test.get("chat_available", False),
+                    "whisper_available": connection_test.get("whisper_available", False),
+                    "features": ["embeddings", "chat_completion", "answer_analysis", "voice_transcription"]
                 }
+            except Exception as e:
+                azure_openai_health = {
+                    "status": "error",
+                    "error": str(e),
+                    "features": []
+                }
+
+        # 2. Check Azure AI Vision connectivity
+        azure_vision_health = {"status": "not_configured", "error": None}
+        vision_endpoint = os.getenv("AZURE_VISION_ENDPOINT")
+        vision_key = os.getenv("AZURE_VISION_KEY")
+
+        if vision_endpoint and vision_key:
+            try:
+                # Simple connectivity check to Azure Vision endpoint
+                import httpx
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    # Just check if endpoint is reachable
+                    response = await client.get(
+                        f"{vision_endpoint}/computervision/imageanalysis:analyze",
+                        params={"api-version": "2024-02-01"},
+                        headers={"Ocp-Apim-Subscription-Key": vision_key}
+                    )
+                    # Endpoint exists if we get any response (even 400/401 means it's reachable)
+                    if response.status_code in [200, 400, 401]:
+                        azure_vision_health = {
+                            "status": "connected",
+                            "endpoint": vision_endpoint,
+                            "features": ["ocr", "document_verification", "korean_text_recognition"]
+                        }
+                    else:
+                        azure_vision_health = {
+                            "status": "error",
+                            "error": f"Unexpected status code: {response.status_code}"
+                        }
+            except Exception as e:
+                azure_vision_health = {
+                    "status": "error",
+                    "error": str(e)
+                }
+
+        # 3. Check Supabase connectivity
+        supabase_health = {"status": "disconnected", "error": None}
+        if "supabase" in services:
+            try:
+                # Test actual database connection
+                supabase_client = get_supabase_client()
+                # Simple query to test connection
+                test_result = supabase_client.table('questions').select('id').limit(1).execute()
+                supabase_health = {
+                    "status": "connected",
+                    "database": "PostgreSQL with pgvector",
+                    "features": ["questions_db", "user_answers", "profile_embeddings", "user_documents"]
+                }
+            except Exception as e:
+                supabase_health = {
+                    "status": "error",
+                    "error": str(e)
+                }
+
+        # Overall health status
+        all_services_healthy = (
+            azure_openai_health.get("status") == "connected" and
+            azure_vision_health.get("status") in ["connected", "not_configured"] and
+            supabase_health.get("status") == "connected"
+        )
+
+        overall_status = "healthy" if all_services_healthy else "degraded"
+
+        return {
+            "status": overall_status,
+            "timestamp": datetime.now().isoformat(),
+            "services": {
+                "azure_openai": azure_openai_health,
+                "azure_vision": azure_vision_health,
+                "supabase": supabase_health
             },
             "features": [
                 "✅ Korean compatibility questions (44 questions)",
                 "✅ Azure OpenAI text analysis",
-                "✅ Profile embedding generation", 
+                "✅ Profile embedding generation",
                 "✅ Similarity-based matching",
                 "✅ Match explanations in Korean",
-                "✅ Answer quality analysis"
+                "✅ Answer quality analysis",
+                "✅ Voice transcription (Whisper)",
+                "✅ Document verification (OCR)"
             ],
             "architecture": {
-                "embedding_model": "Azure OpenAI text-embedding-3-small (1536D)",
-                "chat_model": "Azure OpenAI gpt-4o-mini",
+                "embedding_model": f"Azure OpenAI {os.getenv('AZURE_OPENAI_EMBEDDING_MODEL', 'text-embedding-3-large')}",
+                "chat_model": f"Azure OpenAI {os.getenv('AZURE_OPENAI_CHAT_MODEL', 'gpt-4o-mini')}",
+                "whisper_model": f"Azure OpenAI {os.getenv('AZURE_OPENAI_WHISPER_MODEL', 'whisper-1')}",
+                "vision_ocr": "Azure AI Vision (2024-02-01)",
                 "database": "Supabase PostgreSQL with pgvector",
                 "matching_algorithm": "Cosine similarity + cultural scoring"
             }
         }
-        
+
     except Exception as e:
+        logger.error(f"Health check failed: {e}")
         return {
             "status": "error",
             "error": str(e),
-            "services": services.keys() if services else []
+            "services": list(services.keys()) if services else []
         }
 
 
