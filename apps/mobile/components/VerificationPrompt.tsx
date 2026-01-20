@@ -42,11 +42,6 @@ export default function VerificationPrompt({
       coral: {
         emoji: '🪸',
         name: '산호 회원',
-        limitation: '산호급 이하 회원 매칭 가능'
-      },
-      diamond: {
-        emoji: '💎',
-        name: '다이아 회원',
         limitation: '모든 회원 매칭 가능'
       }
     };

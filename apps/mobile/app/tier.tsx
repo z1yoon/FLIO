@@ -17,7 +17,7 @@ import { FLIOAlertAPI } from '../components/FLIOAlert';
 import TrustBadge, { getTierFromScore } from '../components/TrustBadge';
 
 interface TierPlan {
-  tier: 'pebble' | 'shell' | 'pearl' | 'coral' | 'diamond';
+  tier: 'pebble' | 'shell' | 'pearl' | 'coral';
   name: string;
   emoji: string;
   price: string;
@@ -93,40 +93,20 @@ const TIER_PLANS: TierPlan[] = [
     emoji: '🪸',
     price: '₩39,900',
     priceMonthly: '/월',
-    description: '경제력/직장 인증으로 고신뢰 회원',
-    scoreRange: '60-79% 신뢰도',
+    description: 'VIP 완전 인증 - 최고 신뢰도',
+    scoreRange: '60-100% 신뢰도',
     features: [
       '진주 모든 기능',
       '✅ 신분증 + 학력 인증 필수',
-      '✅ 소득증명서 OR 재직증명서 인증 필수',
+      '✅ 소득증명서 + 재직증명서 인증 필수 (모두)',
       '하루 20명 프로필 보기',
       '1:1 매칭 코디네이터',
+      'VIP 매칭 이벤트 참가',
       '프리미엄 인증 뱃지 (산호 🪸)',
+      '오프라인 만남 주선',
       '매칭 성공률 분석',
       '우선 고객 지원',
       '특별 이벤트 초대',
-    ],
-    color: '#4FD1C7',
-    gradientColors: ['#2E7D7A', '#4FD1C7'] as const,
-  },
-  {
-    tier: 'diamond',
-    name: '다이아',
-    emoji: '💎',
-    price: '₩99,900',
-    priceMonthly: '/월',
-    description: 'VIP 완전 인증 - 최고 신뢰도',
-    scoreRange: '80-100% 신뢰도',
-    features: [
-      '산호 모든 기능',
-      '✅ 신분증 + 학력 인증 필수',
-      '✅ 소득증명서 + 재직증명서 인증 필수 (모두)',
-      '하루 25명 프로필 보기',
-      '전담 매칭 전문가',
-      'VIP 매칭 이벤트 참가',
-      '프리미엄 파트너 인증 (다이아 💎)',
-      '오프라인 만남 주선',
-      '최우선 매칭 알고리즘',
       '진실된 만남 보장',
     ],
     color: '#4FD1C7',
@@ -140,7 +120,7 @@ const TIER_PLANS: TierPlan[] = [
  */
 export default function TierScreen() {
   const [trustScore, setTrustScore] = useState(0);
-  const [currentTier, setCurrentTier] = useState<'pebble' | 'shell' | 'pearl' | 'coral' | 'diamond'>('pebble');
+  const [currentTier, setCurrentTier] = useState<'pebble' | 'shell' | 'pearl' | 'coral'>('pebble');
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -159,8 +139,8 @@ export default function TierScreen() {
             setTrustScore(Math.round(score * 100));
             const tier = getTierFromScore(score);
             // Filter out old tier names, only use new ones
-            if (['pebble', 'shell', 'pearl', 'coral', 'diamond'].includes(tier)) {
-              setCurrentTier(tier as 'pebble' | 'shell' | 'pearl' | 'coral' | 'diamond');
+            if (['pebble', 'shell', 'pearl', 'coral'].includes(tier)) {
+              setCurrentTier(tier as 'pebble' | 'shell' | 'pearl' | 'coral');
             }
           }
         }

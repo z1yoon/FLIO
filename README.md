@@ -27,7 +27,7 @@ FLIO v2.0 transforms from a dating app into a **Korean marriage agency (결혼�
 - ✅ **Voice transcription (Azure OpenAI Whisper)**
 - ✅ **Verification-based tier system with dynamic icons**
 
-**Fully Deployed:** All tiers (조약돌 → 조개 → 진주 → 산호 → 다이아) are now achievable through document verification!
+**Fully Deployed:** All tiers (조약돌 → 조개 → 진주 → 산호) are now achievable through document verification!
 
 ---
 
@@ -69,13 +69,12 @@ Scan QR code with Expo Go app on your phone.
 - **Completeness Score (20%)** - Profile completion percentage
 
 **Trust Tiers (Ocean Pearl Theme - 바다 보물 등급):**
-- 💎 **다이아 (Diamond) (80-100%)** - VIP badge, priority matching, **25 daily matches**
-- 🪸 **산호 (Coral) (60-79%)** - Enhanced visibility, **20 daily matches**
-- 🫧 **진주 (Pearl) (40-59%)** - Standard matching, **15 daily matches**
-- 🐚 **조개 (Shell) (20-39%)** - Basic matching, **10 daily matches**
+- 🪸 **산호 (Coral) (60-100%)** - VIP badge, priority matching, **20 daily matches**
+- 🫧 **진주 (Pearl) (40-59%)** - Enhanced visibility, **15 daily matches**
+- 🐚 **조개 (Shell) (20-39%)** - Standard matching, **10 daily matches**
 - 🪨 **조약돌 (Pebble) (0-19%)** - Limited visibility, **5 daily matches**
 
-*Progression: 조약돌 → 조개 → 진주 → 산호 → 다이아 (Pebble → Shell → Pearl → Coral → Diamond)*
+*Progression: 조약돌 → 조개 → 진주 → 산호 (Pebble → Shell → Pearl → Coral)*
 
 **Payment + Verification Tier System:**
 FLIO tiers require **BOTH subscription payment AND document verification** to upgrade!
@@ -85,8 +84,7 @@ FLIO tiers require **BOTH subscription payment AND document verification** to up
 | 🪨 조약돌 (Pebble) | Free | None (default) | Free tier |
 | 🐚 조개 (Shell) | ₩9,900/월 | ID Card | Pay + Verify |
 | 🫧 진주 (Pearl) | ₩19,900/월 | + Diploma | Pay + Verify |
-| 🪸 산호 (Coral) | ₩39,900/월 | + Income OR Employment | Pay + Verify |
-| 💎 다이아 (Diamond) | ₩99,900/월 | + Income + Employment (all) | Pay + Verify |
+| 🪸 산호 (Coral) | ₩39,900/월 | + Income + Employment (all) | Pay + Verify |
 
 **Philosophy:** Dual requirement ensures commitment - **payment shows financial commitment**, **verification proves sincerity**. Both are needed to access higher tiers and find serious marriage-minded partners.
 
@@ -106,8 +104,7 @@ Korean document support using **Azure AI Vision**:
 **Tier Requirements (Payment + Verification Required):**
 - 🐚 Shell: ₩9,900/월 subscription + ID Card (1 document)
 - 🫧 Pearl: ₩19,900/월 subscription + ID Card + Diploma (2 documents)
-- 🪸 Coral: ₩39,900/월 subscription + ID Card + Diploma + (Income OR Employment) (3 documents)
-- 💎 Diamond: ₩99,900/월 subscription + ID Card + Diploma + Income + Employment (4 documents)
+- 🪸 Coral: ₩39,900/월 subscription + ID Card + Diploma + Income + Employment (4 documents)
 
 **Note:** Phone verification is basic account security, NOT part of tier upgrades. Users must BOTH pay subscription AND verify documents to upgrade tiers.
 
@@ -131,10 +128,10 @@ Monitors user behavior for trust signals:
 ### 💑 Trust-Weighted Matching
 
 Enhanced matching algorithm:
-- **Trust tier filtering** - Diamond users see Coral+ only, tier-based visibility
+- **Trust tier filtering** - Coral users see high-trust users, tier-based visibility
 - **Trust bonus** - 10% boost to final compatibility score
 - **Tier visibility rules** - Protect high-trust users (Ocean Pearl Theme)
-- **Daily match limits** - Based on trust tier: Diamond (25), Coral (20), Pearl (15), Shell (10), Pebble (5)
+- **Daily match limits** - Based on trust tier: Coral (20), Pearl (15), Shell (10), Pebble (5)
 
 ### 📝 Extended Profile Fields
 
@@ -303,7 +300,7 @@ EXPO_PUBLIC_AI_BACKEND_URL=http://localhost:8000
 - Behavioral tracking
 - Consistency checking
 
-**Maximum achievable tier:** 💎 Diamond (100% score) - All features fully working!
+**Maximum achievable tier:** 🪸 Coral (100% score) - All features fully working!
 
 ### Azure Services Already Configured
 
@@ -393,7 +390,7 @@ GET /api/v1/matching/matches/{user_id}?limit=10
 
 # Response includes:
 # - compatibility_score (hybrid + trust bonus)
-# - trust_tier (diamond/coral/pearl/shell/pebble) - Ocean Pearl Theme
+# - trust_tier (coral/pearl/shell/pebble) - Ocean Pearl Theme
 # - verification_status (id/education/income/employment verified)
 
 # Get match explanation with trust comparison
@@ -453,7 +450,7 @@ user_trust_scores:
   - behavioral_score (0.0-1.0)
   - completeness_score (0.0-1.0)
   - total_score (weighted sum)
-  - trust_tier (diamond/coral/pearl/shell/pebble) - Ocean Pearl Theme
+  - trust_tier (coral/pearl/shell/pebble) - Ocean Pearl Theme
 
 -- Behavioral tracking
 user_behavior_logs:
@@ -710,8 +707,7 @@ curl http://localhost:8000/health
 | 1 | Answer 44 questions | 🪨 조약돌 (Pebble) | 5 | Free |
 | 2 | Pay ₩9,900/월 + Verify ID card | 🐚 조개 (Shell) | 10 | ₩9,900/월 |
 | 3 | Pay ₩19,900/월 + Verify diploma | 🫧 진주 (Pearl) | 15 | ₩19,900/월 |
-| 4 | Pay ₩39,900/월 + Verify income OR employment | 🪸 산호 (Coral) | 20 | ₩39,900/월 |
-| 5 | Pay ₩99,900/월 + Verify both income + employment | 💎 다이아 (Diamond) | 25 | ₩99,900/월 |
+| 4 | Pay ₩39,900/월 + Verify income + employment | 🪸 산호 (Coral) | 20 | ₩39,900/월 |
 
 ### Why Require Both Payment AND Verification?
 

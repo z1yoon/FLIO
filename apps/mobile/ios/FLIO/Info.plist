@@ -46,9 +46,11 @@
       <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>FLIO needs camera access for face verification to ensure authentic profiles.</string>
+    <string>FLIO needs camera access to take photos of your verification documents (ID, diploma, income certificate, employment certificate).</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>FLIO needs microphone access for voice input during profile creation.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>FLIO needs photo library access to upload verification documents from your device.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>FLIO uses speech recognition for voice-based profile creation.</string>
     <key>NSUserActivityTypes</key>

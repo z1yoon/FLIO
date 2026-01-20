@@ -1,7 +1,7 @@
 /**
  * Verification Center Component
  * Shows current tier, benefits, and document verification options
- * Ocean Pearl Theme: 조약돌 → 조개 → 진주 → 산호 → 다이아
+ * Ocean Pearl Theme: 조약돌 → 조개 → 진주 → 산호
  */
 
 import React from 'react';
@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import TrustBadge, { getTierFromScore } from './TrustBadge';
 
-type TrustTier = 'diamond' | 'coral' | 'pearl' | 'shell' | 'pebble';
+type TrustTier = 'coral' | 'pearl' | 'shell' | 'pebble';
 
 interface VerificationCenterProps {
   currentTier: TrustTier;
@@ -30,21 +30,13 @@ interface TierInfo {
 }
 
 const TIER_INFO: Record<TrustTier, TierInfo> = {
-  diamond: {
-    name: '다이아 회원',
-    emoji: '💎',
-    color: '#E5E4E2',
-    minScore: 80,
-    dailyMatches: '무제한',
-    benefits: ['모든 회원 매칭', '무제한 매칭 조회', '우선 노출', '프리미엄 배지', 'VIP 지원']
-  },
   coral: {
     name: '산호 회원',
     emoji: '🪸',
     color: '#FFD700',
     minScore: 60,
     dailyMatches: '20명/일',
-    benefits: ['산호급 이하 매칭', '하루 20회 조회', '검증 배지', '우선 매칭']
+    benefits: ['모든 회원 매칭', '하루 20회 조회', '검증 배지', '우선 매칭', 'VIP 지원']
   },
   pearl: {
     name: '진주 회원',
@@ -256,7 +248,7 @@ export default function VerificationCenter({
 }
 
 function getNextTier(currentTier: TrustTier): TrustTier | null {
-  const tiers: TrustTier[] = ['pebble', 'shell', 'pearl', 'coral', 'diamond'];
+  const tiers: TrustTier[] = ['pebble', 'shell', 'pearl', 'coral'];
   const currentIndex = tiers.indexOf(currentTier);
   return currentIndex < tiers.length - 1 ? tiers[currentIndex + 1] : null;
 }

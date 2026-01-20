@@ -14,7 +14,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.flio.mobile",
       "infoPlist": {
-        "NSCameraUsageDescription": "FLIO needs camera access for face verification to ensure authentic profiles.",
+        "NSCameraUsageDescription": "FLIO needs camera access to take photos of your verification documents (ID, diploma, income certificate, employment certificate).",
+        "NSPhotoLibraryUsageDescription": "FLIO needs photo library access to upload verification documents from your device.",
         "NSMicrophoneUsageDescription": "FLIO needs microphone access for voice input during profile creation.",
         "NSSpeechRecognitionUsageDescription": "FLIO uses speech recognition for voice-based profile creation."
       }

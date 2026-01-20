@@ -27,7 +27,7 @@ export default function AccountScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showVerificationCenter, setShowVerificationCenter] = useState(false);
   const [trustScore, setTrustScore] = useState(0);
-  const [currentTier, setCurrentTier] = useState<'pebble' | 'shell' | 'pearl' | 'coral' | 'diamond'>('pebble');
+  const [currentTier, setCurrentTier] = useState<'pebble' | 'shell' | 'pearl' | 'coral'>('pebble');
   const [verifiedDocuments, setVerifiedDocuments] = useState<string[]>([]);
 
   useEffect(() => {
@@ -52,7 +52,11 @@ export default function AccountScreen() {
           if (trustData) {
             const score = Math.round(trustData.total_trust_score * 100);
             setTrustScore(score);
-            setCurrentTier(getTierFromScore(trustData.total_trust_score));
+            const tier = getTierFromScore(trustData.total_trust_score);
+            // Filter to only valid tiers
+            if (['pebble', 'shell', 'pearl', 'coral'].includes(tier)) {
+              setCurrentTier(tier as 'pebble' | 'shell' | 'pearl' | 'coral');
+            }
           }
 
           // Fetch verified documents
@@ -105,17 +109,12 @@ export default function AccountScreen() {
 
   const handleVerifyDocument = (documentType: string) => {
     console.log('📄 Document verification clicked:', documentType);
-    // Show alert without closing modal - avoid modal-over-modal conflict
-    FLIOAlertAPI.alert(
-      '문서 인증',
-      `${documentType} 인증 기능은 곧 추가될 예정입니다.`,
-      [{
-        text: '확인',
-        onPress: () => {
-          console.log('✅ Alert dismissed');
-        }
-      }]
-    );
+    // Close the verification center modal
+    setShowVerificationCenter(false);
+    // Navigate to standalone document verification screen
+    setTimeout(() => {
+      router.push('/document-verification');
+    }, 300);
   };
 
   const getTierKoreanName = (tier: string) => {
@@ -123,8 +122,7 @@ export default function AccountScreen() {
       pebble: '조약돌',
       shell: '조개',
       pearl: '진주',
-      coral: '산호',
-      diamond: '다이아'
+      coral: '산호'
     };
     return names[tier] || '조약돌';
   };
@@ -261,15 +259,31 @@ export default function AccountScreen() {
             </View>
           )}
 
-          <TouchableOpacity
-            style={styles.tierUpgradeButton}
-            onPress={() => router.push('/tier')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="diamond-outline" size={18} color="#4FD1C7" />
-            <Text style={styles.tierUpgradeButtonText}>등급 보기</Text>
-            <Ionicons name="arrow-forward" size={16} color="#4FD1C7" />
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.verifyButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                router.push('/document-verification');
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="shield-checkmark-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.verifyButtonText}>인증하기</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.tierButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                router.push('/tier');
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="diamond-outline" size={18} color="#4FD1C7" />
+              <Text style={styles.tierButtonText}>등급 보기</Text>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
 
         {/* Menu Items */}
@@ -564,21 +578,41 @@ const styles = StyleSheet.create({
     color: '#00FFC8',
     fontWeight: '600',
   },
-  tierUpgradeButton: {
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  verifyButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4FD1C7',
+    borderRadius: 12,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  verifyButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  tierButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(79,209,199,0.3)',
     borderRadius: 12,
     paddingVertical: 12,
-    marginTop: 12,
     gap: 6,
     borderWidth: 1,
     borderColor: 'rgba(79,209,199,0.4)',
   },
-  tierUpgradeButtonText: {
+  tierButtonText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#4FD1C7',
   },
 });

@@ -49,7 +49,6 @@ export default function MatchesScreen() {
   // Get default tier preferences based on current tier
   const getDefaultTierPreferences = (tier: string): string[] => {
     const tierMap: Record<string, string[]> = {
-      diamond: ['diamond', 'coral', 'pearl', 'shell', 'pebble'],
       coral: ['coral', 'pearl', 'shell', 'pebble'],
       pearl: ['pearl', 'shell', 'pebble'],
       shell: ['shell', 'pebble'],
