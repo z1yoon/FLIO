@@ -315,9 +315,9 @@ ORDER BY
 -- Verify migration
 DO $$
 BEGIN
-    RAISE NOTICE 'Migration 009 completed successfully';
+    RAISE NOTICE 'Migration 008 completed successfully';
     RAISE NOTICE 'Created tables: daily_match_views, match_history';
     RAISE NOTICE 'Created functions: get_daily_match_count, can_view_more_matches, log_match_view, get_match_view_stats';
     RAISE NOTICE 'Created view: v_daily_match_counts_by_tier';
-    RAISE NOTICE 'Daily match limits: Platinum=unlimited, Gold=20, Silver=10, Bronze=5, Unverified=3';
+    RAISE NOTICE 'Daily match limits (Ocean Pearl Theme): Diamond=30, Coral=20, Pearl=15, Shell=10, Pebble=5';
 END $$;

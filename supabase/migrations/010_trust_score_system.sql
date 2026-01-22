@@ -53,31 +53,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- ==========================================
 -- PART 2: PHOTO VERIFICATION SYSTEM (REQUIRED)
 -- ==========================================
-
-CREATE TABLE IF NOT EXISTS photo_verifications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-
-    challenge_pose VARCHAR(50) NOT NULL, -- smile, turn_left, turn_right, thumbs_up, peace_sign
-    submitted_selfie_url TEXT NOT NULL,
-    submitted_at TIMESTAMPTZ DEFAULT NOW(),
-
-    -- Azure Face API results
-    face_match_score FLOAT,   -- Does selfie match profile photos? (0.0-1.0)
-    liveness_score FLOAT,     -- Real person, not photo-of-photo? (0.0-1.0)
-    pose_match_score FLOAT,   -- Did they do the requested pose? (0.0-1.0)
-    verification_score FLOAT, -- Average of above
-
-    verification_status VARCHAR(20) DEFAULT 'pending', -- pending, verified, flagged, rejected
-    verified_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ, -- Re-verify every 6 months
-
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_photo_verif_user ON photo_verifications(user_id);
-CREATE INDEX idx_photo_verif_status ON photo_verifications(verification_status);
+-- Note: photo_verifications table created in migration 007
 
 -- Add photo_verified flag to profiles (for quick access control)
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS photo_verified BOOLEAN DEFAULT false;
@@ -131,30 +107,7 @@ $$ LANGUAGE plpgsql;
 -- ==========================================
 -- PART 3: SOCIAL VERIFICATION SYSTEM (10% weight)
 -- ==========================================
-
-CREATE TABLE IF NOT EXISTS social_verifications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-
-    platform VARCHAR(30) NOT NULL, -- linkedin, instagram, kakao, naver
-    platform_user_id VARCHAR(255),
-    platform_username VARCHAR(255),
-
-    verified_name VARCHAR(100),
-    verified_work VARCHAR(100),    -- LinkedIn job title
-    verified_company VARCHAR(100), -- LinkedIn company
-    follower_count INTEGER,         -- Instagram/LinkedIn followers
-    account_age_days INTEGER,       -- Older = more trustworthy
-    is_verified_account BOOLEAN DEFAULT false, -- Blue checkmark
-
-    verification_status VARCHAR(20) DEFAULT 'pending',
-    verified_at TIMESTAMPTZ,
-
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id, platform)
-);
-
-CREATE INDEX idx_social_verif_user ON social_verifications(user_id);
+-- Note: social_verifications table created in migration 007
 
 CREATE OR REPLACE FUNCTION calculate_social_verification_score(p_user_id UUID)
 RETURNS FLOAT AS $$
