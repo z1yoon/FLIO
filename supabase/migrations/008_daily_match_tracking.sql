@@ -1,8 +1,8 @@
 -- ==========================================
--- FLIO Migration 009: Daily Match Tracking
+-- FLIO Daily Match Tracking
 -- ==========================================
 -- This migration adds match view tracking for daily limits
--- based on trust tiers (Platinum/Gold/Silver/Bronze)
+-- based on trust tiers (Diamond/Coral/Pearl/Shell/Pebble)
 -- ==========================================
 
 -- ===================
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS daily_match_views (
     match_action VARCHAR(20), -- 'viewed', 'liked', 'skipped', 'messaged'
 
     -- User's trust tier at time of match
-    user_trust_tier VARCHAR(20), -- platinum, gold, silver, bronze, unverified
+    user_trust_tier VARCHAR(20), -- diamond, coral, pearl, shell, pebble
 
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -113,22 +113,22 @@ BEGIN
     FROM profiles
     WHERE user_id = p_user_id;
 
-    -- If no trust tier found, default to unverified
+    -- If no trust tier found, default to pebble
     IF v_trust_tier IS NULL THEN
-        v_trust_tier := 'unverified';
+        v_trust_tier := 'pebble';
     END IF;
 
     -- Get today's count
     v_daily_count := get_daily_match_count(p_user_id, CURRENT_DATE);
 
-    -- Determine daily limit based on trust tier
+    -- Determine daily limit based on trust tier (Ocean Pearl Theme)
     v_daily_limit := CASE v_trust_tier
-        WHEN 'platinum' THEN 999999  -- Unlimited (represented as very large number)
-        WHEN 'gold' THEN 20
-        WHEN 'silver' THEN 10
-        WHEN 'bronze' THEN 5
-        WHEN 'unverified' THEN 3
-        ELSE 3
+        WHEN 'diamond' THEN 30  -- Diamond: 30 matches/day
+        WHEN 'coral' THEN 20    -- Coral: 20 matches/day
+        WHEN 'pearl' THEN 15    -- Pearl: 15 matches/day
+        WHEN 'shell' THEN 10    -- Shell: 10 matches/day
+        WHEN 'pebble' THEN 5    -- Pebble: 5 matches/day
+        ELSE 5
     END;
 
     -- Check if can view more
@@ -141,7 +141,7 @@ BEGIN
         'daily_limit', v_daily_limit,
         'remaining', v_remaining,
         'trust_tier', v_trust_tier,
-        'is_unlimited', v_trust_tier = 'platinum'
+        'is_unlimited', false
     );
 END;
 $$ LANGUAGE plpgsql;
@@ -300,11 +300,12 @@ WHERE p.trust_tier IS NOT NULL
 GROUP BY p.trust_tier
 ORDER BY
     CASE p.trust_tier
-        WHEN 'platinum' THEN 1
-        WHEN 'gold' THEN 2
-        WHEN 'silver' THEN 3
-        WHEN 'bronze' THEN 4
-        WHEN 'unverified' THEN 5
+        WHEN 'diamond' THEN 1
+        WHEN 'coral' THEN 2
+        WHEN 'pearl' THEN 3
+        WHEN 'shell' THEN 4
+        WHEN 'pebble' THEN 5
+        ELSE 6
     END;
 
 -- ===================

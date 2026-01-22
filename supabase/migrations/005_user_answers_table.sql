@@ -1,78 +1,61 @@
 -- ==========================================
--- User Answers Table
--- Stores user responses to questions
+-- FLIO User Answers & Profiles
+-- ==========================================
+-- Stores user answers and profile embeddings
+-- question_performance table is in migration 003
 -- ==========================================
 
+-- User answers table
 CREATE TABLE IF NOT EXISTS public.user_answers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     question_id VARCHAR(100) NOT NULL REFERENCES public.questions(id) ON DELETE CASCADE,
-    
+
     -- Answer data
     answer_value VARCHAR(100),  -- For choice questions
     answer_text TEXT,           -- For text questions
     importance INTEGER DEFAULT 3 CHECK (importance >= 1 AND importance <= 5),
     is_dealbreaker BOOLEAN DEFAULT false,
-    
+
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+
     -- Ensure one answer per question per user
     UNIQUE(user_id, question_id)
 );
 
--- ==========================================
--- Question Performance Tracking
--- ==========================================
-
-CREATE TABLE IF NOT EXISTS public.question_performance (
-    question_id VARCHAR(100) PRIMARY KEY REFERENCES public.questions(id) ON DELETE CASCADE,
-    total_answers INTEGER DEFAULT 0,
-    avg_importance FLOAT DEFAULT 0.0,
-    dealbreaker_count INTEGER DEFAULT 0,
-    last_answered_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- ==========================================
--- User Profiles for Embeddings
--- ==========================================
-
+-- User profiles for embeddings
 CREATE TABLE IF NOT EXISTS public.user_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    
+
     -- Profile embedding (1024D from Azure OpenAI)
     embedding vector(1024),
     profile_text TEXT,
-    
+
     -- Metadata
     total_answers INTEGER DEFAULT 0,
     last_embedding_update TIMESTAMP WITH TIME ZONE,
-    
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ==========================================
--- User Feedback
--- ==========================================
-
+-- User feedback
 CREATE TABLE IF NOT EXISTS public.user_feedback (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    
+
     feedback_type VARCHAR(50) NOT NULL,
     content TEXT NOT NULL,
     rating INTEGER CHECK (rating >= 1 AND rating <= 5),
-    
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- ==========================================
--- Indexes
+-- INDEXES
 -- ==========================================
 
 CREATE INDEX IF NOT EXISTS idx_user_answers_user_id ON public.user_answers(user_id);
@@ -85,15 +68,14 @@ CREATE INDEX IF NOT EXISTS idx_user_profiles_embedding ON public.user_profiles U
 CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON public.user_feedback(user_id);
 
 -- ==========================================
--- Row Level Security (RLS)
+-- ROW LEVEL SECURITY
 -- ==========================================
 
 ALTER TABLE public.user_answers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.question_performance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_feedback ENABLE ROW LEVEL SECURITY;
 
--- User Answers: Users can only see and manage their own answers
+-- User answers
 CREATE POLICY "Users can view own answers"
 ON public.user_answers FOR SELECT
 TO authenticated
@@ -114,13 +96,7 @@ ON public.user_answers FOR DELETE
 TO authenticated
 USING (auth.uid() = user_id);
 
--- Question Performance: Read-only for all authenticated users
-CREATE POLICY "Question performance is viewable by authenticated users"
-ON public.question_performance FOR SELECT
-TO authenticated
-USING (true);
-
--- User Profiles: Users can only see and manage their own profile
+-- User profiles
 CREATE POLICY "Users can view own profile"
 ON public.user_profiles FOR SELECT
 TO authenticated
@@ -136,7 +112,7 @@ ON public.user_profiles FOR UPDATE
 TO authenticated
 USING (auth.uid() = user_id);
 
--- User Feedback: Users can only see and create their own feedback
+-- User feedback
 CREATE POLICY "Users can view own feedback"
 ON public.user_feedback FOR SELECT
 TO authenticated
@@ -148,7 +124,7 @@ TO authenticated
 WITH CHECK (auth.uid() = user_id);
 
 -- ==========================================
--- Triggers
+-- TRIGGERS
 -- ==========================================
 
 -- Update updated_at timestamp
@@ -170,13 +146,8 @@ CREATE TRIGGER user_profiles_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_timestamp();
 
-CREATE TRIGGER question_performance_updated_at
-    BEFORE UPDATE ON public.question_performance
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_timestamp();
-
 -- ==========================================
--- Helper Functions
+-- HELPER FUNCTIONS
 -- ==========================================
 
 -- Function to store user embedding
@@ -190,14 +161,14 @@ RETURNS BOOLEAN AS $$
 BEGIN
     INSERT INTO public.user_profiles (user_id, embedding, profile_text, total_answers, last_embedding_update)
     VALUES (p_user_id, p_embedding, p_profile_text, p_total_answers, NOW())
-    ON CONFLICT (user_id) 
+    ON CONFLICT (user_id)
     DO UPDATE SET
         embedding = p_embedding,
         profile_text = p_profile_text,
         total_answers = p_total_answers,
         last_embedding_update = NOW(),
         updated_at = NOW();
-    
+
     RETURN FOUND;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -206,20 +177,17 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION store_user_embedding(UUID, vector, TEXT, INTEGER) TO authenticated, service_role;
 
 -- ==========================================
--- Documentation
+-- COMMENTS
 -- ==========================================
 
-COMMENT ON TABLE public.user_answers IS 
+COMMENT ON TABLE public.user_answers IS
 'Stores user responses to questions. One answer per question per user.';
 
-COMMENT ON TABLE public.question_performance IS 
-'Tracks question performance metrics for analytics.';
-
-COMMENT ON TABLE public.user_profiles IS 
+COMMENT ON TABLE public.user_profiles IS
 'Stores user profile embeddings (1024D) for AI matching.';
 
-COMMENT ON TABLE public.user_feedback IS 
+COMMENT ON TABLE public.user_feedback IS
 'User feedback and ratings for app improvement.';
 
-COMMENT ON FUNCTION store_user_embedding IS 
+COMMENT ON FUNCTION store_user_embedding IS
 'Stores or updates user profile embedding for AI matching.';

@@ -63,7 +63,10 @@
       "Bash(supabase migration repair:*)",
       "Bash(supabase migration:*)",
       "Read(//var/folders/yk/bhdsdrgs6ksdh71rmw9b4l180000gn/T/TemporaryItems/NSIRD_screencaptureui_51qwmU/**)",
-      "Read(//var/folders/yk/bhdsdrgs6ksdh71rmw9b4l180000gn/T/TemporaryItems/NSIRD_screencaptureui_cyC8Nc/**)"
+      "Read(//var/folders/yk/bhdsdrgs6ksdh71rmw9b4l180000gn/T/TemporaryItems/NSIRD_screencaptureui_cyC8Nc/**)",
+      "Bash(done)",
+      "Bash(echo \"\n-- Add photo_verified flag to profiles \\(for quick access control\\)\nALTER TABLE profiles ADD COLUMN IF NOT EXISTS photo_verified BOOLEAN DEFAULT false;\nALTER TABLE profiles ADD COLUMN IF NOT EXISTS photo_verified_at TIMESTAMPTZ;\n\")",
+      "Bash(awk:*)"
     ],
     "deny": []
   },

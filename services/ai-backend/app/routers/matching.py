@@ -151,11 +151,7 @@ async def find_matches(
                 'pebble': 'shell',
                 'shell': 'pearl',
                 'pearl': 'coral',
-                'coral': 'diamond',
-                'unverified': 'shell',  # Legacy support
-                'bronze': 'pearl',      # Legacy support
-                'silver': 'coral',      # Legacy support
-                'gold': 'diamond'       # Legacy support
+                'coral': 'diamond'
             }
             tier_korean_names = {
                 'pebble': '조약돌',
@@ -214,12 +210,13 @@ async def find_matches(
             matches=matches_dict,
             total_found=len(filtered_matches),
             metadata={
-                "algorithm_version": "3.1-balanced",
+                "algorithm_version": "1.0",
                 "embedding_dimension": 1024,
-                "static_questions_weight": 0.6,
-                "importance_bonus_weight": 0.2,
-                "embedding_weight": 0.2,
-                "dealbreaker_filtering": True
+                "embedding_weight": 0.6,
+                "weighted_answers_weight": 0.4,
+                "dealbreaker_filtering": True,
+                "photo_verification_required": True,
+                "tier_filtering": True
             }
         )
         
@@ -324,12 +321,13 @@ async def reshuffle_matches_with_preference(request: ReshuffleRequest):
             matches=matches_dict,
             total_found=len(filtered_matches),
             metadata={
-                "algorithm_version": "3.2-preference-aware",
+                "algorithm_version": "1.0-preference",
                 "embedding_dimension": 1024,
-                "static_questions_weight": 0.6,
-                "importance_bonus_weight": 0.2,
-                "embedding_weight": 0.2,
+                "embedding_weight": 0.6,
+                "weighted_answers_weight": 0.4,
                 "dealbreaker_filtering": True,
+                "photo_verification_required": True,
+                "tier_filtering": True,
                 "user_preference": request.preference,
                 "has_reshuffle_history": len(reshuffle_context) > 0
             }

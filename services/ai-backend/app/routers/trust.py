@@ -69,45 +69,49 @@ class BehaviorLogRequest(BaseModel):
     new_value: Optional[str] = None
 
 
-# Korean tier names
+# Ocean Pearl Theme Korean tier names
 TIER_KOREAN_NAMES = {
-    'platinum': 'VIP회원',
-    'gold': '우수회원',
-    'silver': '인증회원',
-    'bronze': '기본회원',
-    'unverified': '미인증'
+    'diamond': '다이아',
+    'coral': '산호',
+    'pearl': '진주',
+    'shell': '조개',
+    'pebble': '조약돌'
 }
 
 # Tier requirements
 TIER_REQUIREMENTS = {
-    'platinum': [
+    'diamond': [
+        '사진 인증 완료 (필수)',
         '신분증 인증 완료',
         '학력 인증 완료',
         '소득 인증 완료',
         '재직 인증 완료',
+        '소셜 인증 2개 이상 (LinkedIn, Instagram 등)',
         '모든 질문 답변 완료',
-        '가족 정보 입력 완료',
-        '논리적 일관성 검증 통과'
+        '90일 이상 모범 활동 기록'
     ],
-    'gold': [
+    'coral': [
+        '사진 인증 완료 (필수)',
         '신분증 인증 완료',
-        '학력 또는 소득 인증 1개 이상',
+        '학력 인증 완료',
+        '소득 인증 완료',
+        '소셜 인증 1개 이상 (LinkedIn 권장)',
+        '모든 질문 답변 완료'
+    ],
+    'pearl': [
+        '사진 인증 완료 (필수)',
+        '신분증 인증 완료',
         '모든 질문 답변 완료',
-        '가족 정보 입력 완료'
-    ],
-    'silver': [
-        '신분증 인증 완료',
-        '질문 80% 이상 답변',
         '기본 프로필 완성'
     ],
-    'bronze': [
-        '전화번호 인증',
-        '질문 50% 이상 답변',
+    'shell': [
+        '사진 인증 완료 (필수)',
+        '모든 질문 답변 완료',
         '기본 정보 입력'
     ],
-    'unverified': [
-        '아직 인증되지 않음',
-        '매칭 서비스 이용 불가'
+    'pebble': [
+        '사진 인증 완료 (필수)',
+        '기본 가입 상태'
     ]
 }
 
@@ -144,9 +148,12 @@ async def get_trust_score(user_id: str):
             trust_tier=score.trust_tier,
             component_scores={
                 'document': score.document_score,
+                'photo': getattr(score, 'photo_score', 0.0),
                 'consistency': score.consistency_score,
                 'behavioral': score.behavioral_score,
-                'completeness': score.completeness_score
+                'social': getattr(score, 'social_score', 0.0),
+                'completeness': score.completeness_score,
+                'reputation': getattr(score, 'reputation_score', 1.0)
             },
             tier_benefits=benefits,
             calculation_details=score.calculation_details,
@@ -304,19 +311,20 @@ async def get_trust_history(
 @router.get("/tiers/info")
 async def get_all_tier_info():
     """
-    Get information about all trust tiers
+    Get information about all trust tiers (Ocean Pearl Theme)
 
     Returns tier names, thresholds, benefits, and requirements
     Useful for displaying tier system to users
     """
     tiers = []
 
+    # Ocean Pearl Theme: 5-tier system
     tier_thresholds = {
-        'platinum': 0.90,
-        'gold': 0.75,
-        'silver': 0.60,
-        'bronze': 0.40,
-        'unverified': 0.00
+        'diamond': 0.80,   # 80-100%
+        'coral': 0.60,     # 60-79%
+        'pearl': 0.40,     # 40-59%
+        'shell': 0.20,     # 20-39%
+        'pebble': 0.00     # 0-19%
     }
 
     for tier_name, min_score in tier_thresholds.items():
@@ -336,16 +344,16 @@ async def get_all_tier_info():
 @router.get("/tier/{tier_name}/info", response_model=TrustTierInfoResponse)
 async def get_tier_info(tier_name: str):
     """
-    Get information about a specific trust tier
+    Get information about a specific trust tier (Ocean Pearl Theme)
 
-    - **tier_name**: Tier name (platinum, gold, silver, bronze, unverified)
+    - **tier_name**: Tier name (diamond, coral, pearl, shell, pebble)
     """
     tier_thresholds = {
-        'platinum': 0.90,
-        'gold': 0.75,
-        'silver': 0.60,
-        'bronze': 0.40,
-        'unverified': 0.00
+        'diamond': 0.80,
+        'coral': 0.60,
+        'pearl': 0.40,
+        'shell': 0.20,
+        'pebble': 0.00
     }
 
     if tier_name not in tier_thresholds:
@@ -443,13 +451,13 @@ async def get_upgrade_path(user_id: str):
         current_tier = score.trust_tier
         current_score = score.total_trust_score
 
-        # Determine next tier and gap
-        tier_order = ['unverified', 'bronze', 'silver', 'gold', 'platinum']
+        # Determine next tier and gap (Ocean Pearl Theme)
+        tier_order = ['pebble', 'shell', 'pearl', 'coral', 'diamond']
         tier_thresholds = {
-            'bronze': 0.40,
-            'silver': 0.60,
-            'gold': 0.75,
-            'platinum': 0.90
+            'shell': 0.20,
+            'pearl': 0.40,
+            'coral': 0.60,
+            'diamond': 0.80
         }
 
         current_index = tier_order.index(current_tier)
@@ -502,23 +510,38 @@ async def get_upgrade_path(user_id: str):
             "component_breakdown": {
                 "document": {
                     "score": score.document_score,
-                    "weight": 0.35,
-                    "contribution": round(score.document_score * 0.35, 3)
+                    "weight": 0.25,
+                    "contribution": round(score.document_score * 0.25, 3)
+                },
+                "photo": {
+                    "score": getattr(score, 'photo_score', 0.0),
+                    "weight": 0.20,
+                    "contribution": round(getattr(score, 'photo_score', 0.0) * 0.20, 3)
                 },
                 "consistency": {
                     "score": score.consistency_score,
-                    "weight": 0.25,
-                    "contribution": round(score.consistency_score * 0.25, 3)
+                    "weight": 0.15,
+                    "contribution": round(score.consistency_score * 0.15, 3)
                 },
                 "behavioral": {
                     "score": score.behavioral_score,
-                    "weight": 0.20,
-                    "contribution": round(score.behavioral_score * 0.20, 3)
+                    "weight": 0.15,
+                    "contribution": round(score.behavioral_score * 0.15, 3)
+                },
+                "social": {
+                    "score": getattr(score, 'social_score', 0.0),
+                    "weight": 0.10,
+                    "contribution": round(getattr(score, 'social_score', 0.0) * 0.10, 3)
                 },
                 "completeness": {
                     "score": score.completeness_score,
-                    "weight": 0.20,
-                    "contribution": round(score.completeness_score * 0.20, 3)
+                    "weight": 0.10,
+                    "contribution": round(score.completeness_score * 0.10, 3)
+                },
+                "reputation": {
+                    "score": getattr(score, 'reputation_score', 1.0),
+                    "weight": 0.05,
+                    "contribution": round(getattr(score, 'reputation_score', 1.0) * 0.05, 3)
                 }
             },
             "is_max_tier": False
