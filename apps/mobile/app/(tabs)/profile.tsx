@@ -70,16 +70,11 @@ export default function ProfileScreen() {
         });
       }
 
-      // Load trust score
-      try {
-        const trustScoreData = await aiQuestionService.getTrustScore(userId);
-        if (trustScoreData) {
-          setTrustScore(trustScoreData);
-          console.log(`🔐 Trust score loaded: ${trustScoreData.trust_tier} (${(trustScoreData.total_trust_score * 100).toFixed(1)}%)`);
-        }
-      } catch (error) {
-        console.log('ℹ️ Trust score not available yet');
-        // Trust score is optional, don't show error to user
+      // Load trust score - will throw on error (no fallback)
+      const trustScoreData = await aiQuestionService.getTrustScore(userId);
+      if (trustScoreData) {
+        setTrustScore(trustScoreData);
+        console.log(`🔐 Trust score loaded: ${trustScoreData.trust_tier} (${(trustScoreData.total_trust_score * 100).toFixed(1)}%)`);
       }
 
     } catch (error) {
@@ -195,8 +190,17 @@ export default function ProfileScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>내 프로필</Text>
-        <Text style={styles.headerSubtitle}>질문 답변 현황</Text>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>내 프로필</Text>
+          <Text style={styles.headerSubtitle}>질문 답변 현황</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.accountButton}
+          onPress={() => router.push('/account')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="person-circle-outline" size={26} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -387,10 +391,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 60,
     paddingHorizontal: 24,
     paddingBottom: 20,
-    alignItems: 'center',
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
@@ -401,6 +410,15 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
+  },
+  accountButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
   },
   scrollView: {
     flex: 1,

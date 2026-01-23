@@ -678,26 +678,21 @@ class AIQuestionService {
   } | null> {
     console.log('🏆 Loading trust score for user:', userId);
 
-    try {
-      const response = await fetch(`${this.baseUrl}/trust/score/${userId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+    const response = await fetch(`${this.baseUrl}/trust/score/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
 
-      if (!response.ok) {
-        throw new Error(`Trust score check failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log(`✅ Trust tier: ${data.trust_tier} (${(data.total_trust_score * 100).toFixed(1)}%)`);
-
-      return data;
-    } catch (error: any) {
-      console.error('Failed to get trust score:', error);
-      return null;
+    if (!response.ok) {
+      throw new Error(`Trust score check failed: ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log(`✅ Trust tier: ${data.trust_tier} (${(data.total_trust_score * 100).toFixed(1)}%)`);
+
+    return data;
   }
 
   /**

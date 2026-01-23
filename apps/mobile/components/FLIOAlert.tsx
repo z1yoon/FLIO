@@ -35,10 +35,13 @@ function FLIOAlert({
   onClose,
 }: FLIOAlertProps) {
   const handleButtonPress = (button: FLIOAlertButton) => {
-    if (button.onPress) {
-      button.onPress();
-    }
     onClose();
+    // Execute button callback after modal is dismissed
+    if (button.onPress) {
+      setTimeout(() => {
+        button.onPress!();
+      }, 100);
+    }
   };
 
   return (
@@ -114,6 +117,13 @@ function FLIOAlert({
   );
 }
 
+// Alert queue to prevent modal-on-modal crashes
+interface QueuedAlert {
+  title: string;
+  message?: string;
+  buttons?: FLIOAlertButton[];
+}
+
 // Global ref to store the show function - set by provider
 let globalShowAlert: ((title: string, message?: string, buttons?: FLIOAlertButton[]) => void) | null = null;
 
@@ -128,16 +138,41 @@ export function FLIOAlertProvider({ children }: { children: React.ReactNode }) {
     title: '',
   });
 
+  // Queue to handle multiple alerts
+  const queueRef = useRef<QueuedAlert[]>([]);
+  const isShowingRef = useRef(false);
+
   // Use ref to keep show function stable
   const showRef = useRef<(title: string, message?: string, buttons?: FLIOAlertButton[]) => void>();
 
+  // Process the next alert in queue
+  const processQueue = () => {
+    if (queueRef.current.length > 0 && !isShowingRef.current) {
+      const nextAlert = queueRef.current.shift();
+      if (nextAlert) {
+        isShowingRef.current = true;
+        setAlertState({
+          visible: true,
+          title: nextAlert.title,
+          message: nextAlert.message,
+          buttons: nextAlert.buttons || [{ text: '확인', onPress: () => {} }],
+        });
+      }
+    }
+  };
+
   showRef.current = (title: string, message?: string, buttons?: FLIOAlertButton[]) => {
-    setAlertState({
-      visible: true,
-      title,
-      message,
-      buttons: buttons || [{ text: '확인', onPress: () => {} }],
-    });
+    queueRef.current.push({ title, message, buttons });
+    processQueue();
+  };
+
+  const handleClose = () => {
+    isShowingRef.current = false;
+    setAlertState({ ...alertState, visible: false });
+    // Process next alert after a small delay to allow modal dismiss animation
+    setTimeout(() => {
+      processQueue();
+    }, 300);
   };
 
   // Set global ref immediately when component mounts
@@ -160,7 +195,7 @@ export function FLIOAlertProvider({ children }: { children: React.ReactNode }) {
         title={alertState.title}
         message={alertState.message}
         buttons={alertState.buttons}
-        onClose={() => setAlertState({ ...alertState, visible: false })}
+        onClose={handleClose}
       />
     </>
   );

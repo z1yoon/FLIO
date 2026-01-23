@@ -23,21 +23,24 @@ logger = logging.getLogger(__name__)
 
 
 class TrustTier(str, Enum):
-    """Trust tiers for Korean marriage agency style ranking"""
-    PLATINUM = "platinum"  # VIP회원 - 0.90+
-    GOLD = "gold"          # 우수회원 - 0.75-0.89
-    SILVER = "silver"      # 인증회원 - 0.60-0.74
-    BRONZE = "bronze"      # 기본회원 - 0.40-0.59
-    UNVERIFIED = "unverified"  # 미인증 - 0.00-0.39
+    """Trust tiers - Ocean Pearl Theme"""
+    DIAMOND = "diamond"  # 다이아 - 0.80+
+    CORAL = "coral"      # 산호 - 0.60-0.79
+    PEARL = "pearl"      # 진주 - 0.40-0.59
+    SHELL = "shell"      # 조개 - 0.20-0.39
+    PEBBLE = "pebble"    # 조약돌 - 0.00-0.19
 
 
 class TrustScoreResponse(BaseModel):
-    """Trust score calculation result"""
+    """Trust score calculation result - all 7 components"""
     user_id: str
     document_score: float
+    photo_score: float
     consistency_score: float
     behavioral_score: float
+    social_score: float
     completeness_score: float
+    reputation_score: float
     total_trust_score: float
     trust_tier: str
     calculation_details: Dict[str, Any]
@@ -59,53 +62,57 @@ class TrustScoreService:
     Implements Korean marriage agency (결혼정보회사) style credibility system
     """
 
-    # Trust Score Component Weights
+    # Trust Score Component Weights (7 components - matches database)
     WEIGHTS = {
-        'document': 0.35,      # Document verification (가장 중요)
-        'consistency': 0.25,   # NLI logical consistency
-        'behavioral': 0.20,    # Edit patterns, stability
-        'completeness': 0.20   # Profile completeness
+        'document': 0.25,      # Document verification (신분증, 학력, 소득, 재직)
+        'photo': 0.20,         # Photo verification (필수)
+        'consistency': 0.15,   # NLI logical consistency
+        'behavioral': 0.15,    # Edit patterns, stability
+        'social': 0.10,        # Social verification (LinkedIn, Instagram, etc)
+        'completeness': 0.10,  # Profile completeness
+        'reputation': 0.05     # Reputation score (reports, feedback)
     }
+    # Total: 100%
 
     # Trust Tier Thresholds
     TIER_THRESHOLDS = {
-        TrustTier.PLATINUM: 0.90,
-        TrustTier.GOLD: 0.75,
-        TrustTier.SILVER: 0.60,
-        TrustTier.BRONZE: 0.40,
-        TrustTier.UNVERIFIED: 0.0
+        TrustTier.DIAMOND: 0.80,
+        TrustTier.CORAL: 0.60,
+        TrustTier.PEARL: 0.40,
+        TrustTier.SHELL: 0.20,
+        TrustTier.PEBBLE: 0.0
     }
 
     # Tier Benefits
     TIER_BENEFITS = {
-        TrustTier.PLATINUM: {
-            'daily_matches': -1,  # Unlimited
-            'can_see_tiers': ['gold', 'platinum'],
-            'badge': 'VIP회원',
+        TrustTier.DIAMOND: {
+            'daily_matches': 30,
+            'can_see_tiers': ['diamond', 'coral', 'pearl', 'shell', 'pebble'],
+            'badge': '다이아',
             'priority_matching': True
         },
-        TrustTier.GOLD: {
+        TrustTier.CORAL: {
             'daily_matches': 20,
-            'can_see_tiers': ['silver', 'gold', 'platinum'],
-            'badge': '우수회원',
+            'can_see_tiers': ['coral', 'pearl', 'shell', 'pebble'],
+            'badge': '산호',
             'priority_matching': True
         },
-        TrustTier.SILVER: {
+        TrustTier.PEARL: {
+            'daily_matches': 15,
+            'can_see_tiers': ['pearl', 'shell', 'pebble'],
+            'badge': '진주',
+            'priority_matching': False
+        },
+        TrustTier.SHELL: {
             'daily_matches': 10,
-            'can_see_tiers': ['bronze', 'silver', 'gold', 'platinum'],
-            'badge': '인증회원',
+            'can_see_tiers': ['shell', 'pebble'],
+            'badge': '조개',
             'priority_matching': False
         },
-        TrustTier.BRONZE: {
+        TrustTier.PEBBLE: {
             'daily_matches': 5,
-            'can_see_tiers': ['unverified', 'bronze', 'silver', 'gold', 'platinum'],
-            'badge': '기본회원',
-            'priority_matching': False
-        },
-        TrustTier.UNVERIFIED: {
-            'daily_matches': 0,
-            'can_see_tiers': [],
-            'badge': '미인증',
+            'can_see_tiers': ['pebble'],
+            'badge': '조약돌',
             'priority_matching': False
         }
     }
@@ -126,233 +133,223 @@ class TrustScoreService:
 
         Returns:
             TrustScoreResponse with all component scores and tier
+
+        Raises:
+            Exception if calculation fails - no fallback logic
         """
-        try:
-            logger.info(f"Calculating trust score for user {user_id}")
+        logger.info(f"Calculating trust score for user {user_id}")
 
-            # Use database RPC function for atomic calculation
-            result = self.supabase.rpc('calculate_trust_score', {
-                'p_user_id': user_id
-            }).execute()
+        # Use database RPC function for atomic calculation
+        result = self.supabase.rpc('calculate_trust_score', {
+            'p_user_id': user_id
+        }).execute()
 
-            if result.data:
-                data = result.data
-                return TrustScoreResponse(
-                    user_id=user_id,
-                    document_score=data.get('document_score', 0.0),
-                    consistency_score=data.get('consistency_score', 1.0),
-                    behavioral_score=data.get('behavioral_score', 1.0),
-                    completeness_score=data.get('completeness_score', 0.0),
-                    total_trust_score=data.get('total_score', 0.0),
-                    trust_tier=data.get('trust_tier', 'unverified'),
-                    calculation_details=data,
-                    last_calculated_at=datetime.fromisoformat(
-                        data.get('calculated_at', datetime.now().isoformat()).replace('Z', '+00:00')
-                    )
-                )
+        # No fallback - will raise if data is missing
+        data = result.data
 
-            # Fallback to manual calculation if RPC fails
-            return await self._calculate_trust_score_manual(user_id)
-
-        except Exception as e:
-            logger.error(f"Failed to calculate trust score for user {user_id}: {e}")
-            # Return default scores on error
-            return TrustScoreResponse(
-                user_id=user_id,
-                document_score=0.0,
-                consistency_score=1.0,
-                behavioral_score=1.0,
-                completeness_score=0.0,
-                total_trust_score=0.0,
-                trust_tier='unverified',
-                calculation_details={'error': str(e)},
-                last_calculated_at=datetime.now()
+        return TrustScoreResponse(
+            user_id=user_id,
+            document_score=data['document_score'],
+            consistency_score=data['consistency_score'],
+            behavioral_score=data['behavioral_score'],
+            completeness_score=data['completeness_score'],
+            total_trust_score=data['total_score'],
+            trust_tier=data['trust_tier'],
+            calculation_details=data,
+            last_calculated_at=datetime.fromisoformat(
+                data['calculated_at'].replace('Z', '+00:00')
             )
+        )
 
     async def _calculate_trust_score_manual(self, user_id: str) -> TrustScoreResponse:
         """
-        Manual trust score calculation (fallback)
-        Used when database RPC is not available
+        Manual trust score calculation - matches database function calculate_trust_score()
+
+        All 7 components fully implemented:
+        1. Document (25%)
+        2. Photo (20%)
+        3. Consistency (15%)
+        4. Behavioral (15%)
+        5. Social (10%)
+        6. Completeness (10%)
+        7. Reputation (5%)
         """
-        try:
-            # 1. Calculate Document Score
-            doc_score = await self._calculate_document_score(user_id)
+        # Calculate all 7 components
+        doc_score = await self._calculate_document_score(user_id)
+        photo_score = await self._calculate_photo_score(user_id)
+        consistency_score = await self._calculate_consistency_score(user_id)
+        behavioral_score = await self._calculate_behavioral_score(user_id)
+        social_score = await self._calculate_social_score(user_id)
+        completeness_score = await self._calculate_completeness_score(user_id)
+        reputation_score = await self._calculate_reputation_score(user_id)
 
-            # 2. Calculate Consistency Score
-            consistency_score = await self._calculate_consistency_score(user_id)
+        # Calculate weighted total (7 components matching database weights)
+        total_score = (
+            doc_score * self.WEIGHTS['document'] +
+            photo_score * self.WEIGHTS['photo'] +
+            consistency_score * self.WEIGHTS['consistency'] +
+            behavioral_score * self.WEIGHTS['behavioral'] +
+            social_score * self.WEIGHTS['social'] +
+            completeness_score * self.WEIGHTS['completeness'] +
+            reputation_score * self.WEIGHTS['reputation']
+        )
 
-            # 3. Calculate Behavioral Score
-            behavioral_score = await self._calculate_behavioral_score(user_id)
+        # Clamp to 0-1
+        total_score = max(0.0, min(1.0, total_score))
 
-            # 4. Calculate Completeness Score
-            completeness_score = await self._calculate_completeness_score(user_id)
+        # Determine tier
+        trust_tier = self._determine_tier(total_score)
 
-            # 5. Calculate weighted total
-            total_score = (
-                doc_score * self.WEIGHTS['document'] +
-                consistency_score * self.WEIGHTS['consistency'] +
-                behavioral_score * self.WEIGHTS['behavioral'] +
-                completeness_score * self.WEIGHTS['completeness']
-            )
+        # Store results (only 4 main scores stored in table, matching database schema)
+        await self._store_trust_score(
+            user_id, doc_score, consistency_score,
+            behavioral_score, completeness_score,
+            total_score, trust_tier
+        )
 
-            # Clamp to 0-1
-            total_score = max(0.0, min(1.0, total_score))
-
-            # 6. Determine tier
-            trust_tier = self._determine_tier(total_score)
-
-            # 7. Store results
-            await self._store_trust_score(
-                user_id, doc_score, consistency_score,
-                behavioral_score, completeness_score,
-                total_score, trust_tier
-            )
-
-            return TrustScoreResponse(
-                user_id=user_id,
-                document_score=doc_score,
-                consistency_score=consistency_score,
-                behavioral_score=behavioral_score,
-                completeness_score=completeness_score,
-                total_trust_score=total_score,
-                trust_tier=trust_tier,
-                calculation_details={
-                    'weights': self.WEIGHTS,
-                    'method': 'manual'
-                },
-                last_calculated_at=datetime.now()
-            )
-
-        except Exception as e:
-            logger.error(f"Manual trust score calculation failed: {e}")
-            raise
+        return TrustScoreResponse(
+            user_id=user_id,
+            document_score=doc_score,
+            photo_score=photo_score,
+            consistency_score=consistency_score,
+            behavioral_score=behavioral_score,
+            social_score=social_score,
+            completeness_score=completeness_score,
+            reputation_score=reputation_score,
+            total_trust_score=total_score,
+            trust_tier=trust_tier,
+            calculation_details={
+                'weights': self.WEIGHTS,
+                'method': 'manual'
+            },
+            last_calculated_at=datetime.now()
+        )
 
     async def _calculate_document_score(self, user_id: str) -> float:
         """
         Calculate document verification score
 
-        Score components:
-        - Each verified document contributes equally
-        - Combined score: (match_score * 0.7) + (authenticity_score * 0.3)
-        - Only documents with authenticity_score >= 0.5 are included
+        Matches database function calculate_trust_score():
+        - Simple average of match_score for all verified documents
+        - All document types are weighted equally
         """
-        try:
-            result = self.supabase.table('user_documents').select(
-                'document_type, match_score, authenticity_score, verification_status'
-            ).eq('user_id', user_id).execute()
+        result = self.supabase.table('user_documents').select(
+            'match_score, verification_status'
+        ).eq('user_id', user_id).eq('verification_status', 'verified').execute()
 
-            if not result.data:
-                return 0.0
-
-            # Calculate score based on verified documents with valid authenticity
-            verified_docs = [
-                doc for doc in result.data
-                if doc['verification_status'] == 'verified'
-                and (doc.get('authenticity_score') is None or doc.get('authenticity_score', 0.0) >= 0.5)
-            ]
-
-            if not verified_docs:
-                return 0.0
-
-            # Weight by document type importance
-            doc_weights = {
-                'id_card': 0.30,
-                'diploma': 0.25,
-                'income_cert': 0.25,
-                'employment_cert': 0.20
-            }
-
-            total_score = 0.0
-            total_weight = 0.0
-
-            for doc in verified_docs:
-                doc_type = doc['document_type']
-                match_score = doc.get('match_score', 0.0) or 0.0
-                authenticity_score = doc.get('authenticity_score', 1.0) or 1.0
-                
-                # Combine match and authenticity scores
-                # Weight: 70% match, 30% authenticity
-                combined_score = (match_score * 0.7) + (authenticity_score * 0.3)
-                
-                weight = doc_weights.get(doc_type, 0.1)
-
-                total_score += combined_score * weight
-                total_weight += weight
-
-            # Normalize by total possible weight (if partial verification)
-            # Also give bonus for having more documents verified
-            coverage_bonus = len(verified_docs) / len(self.DOCUMENT_TYPES) * 0.2
-
-            final_score = (total_score / total_weight if total_weight > 0 else 0.0) + coverage_bonus
-
-            return min(1.0, final_score)
-
-        except Exception as e:
-            logger.error(f"Document score calculation failed: {e}")
+        if not result.data:
             return 0.0
+
+        # Simple average of match_scores (same as database: AVG(match_score))
+        match_scores = [doc['match_score'] for doc in result.data if doc['match_score'] is not None]
+
+        if not match_scores:
+            return 0.0
+
+        return sum(match_scores) / len(match_scores)
 
     async def _calculate_consistency_score(self, user_id: str) -> float:
         """
         Calculate logical consistency score based on NLI checks
 
-        Score = 1.0 - average(contradiction_scores)
-        Unresolved contradictions decrease trust
+        Matches database function calculate_trust_score():
+        - New users with < 10 answers: Low base score (0.3-0.6)
+        - Users with 10+ answers and no contradictions: High score (0.8-1.0)
+        - Unresolved contradictions decrease trust
         """
-        try:
-            result = self.supabase.table('consistency_checks').select(
-                'contradiction_score, is_resolved'
-            ).eq('user_id', user_id).eq('is_resolved', False).execute()
+        # Check how many answers user has
+        answers_result = self.supabase.table('user_answers').select(
+            'question_id', count='exact'
+        ).eq('user_id', user_id).execute()
 
-            if not result.data:
-                return 1.0  # Perfect consistency if no issues found
+        answer_count = answers_result.count
 
-            # Calculate average contradiction score
-            contradiction_scores = [
-                check['contradiction_score']
-                for check in result.data
-                if check['contradiction_score'] is not None
-            ]
+        # New users with insufficient data get lower base score
+        if answer_count < 10:
+            # Gradually increase base score from 0.3 to 0.6 as they answer more
+            base_score = 0.3 + (answer_count / 10) * 0.3
+            return base_score
 
-            if not contradiction_scores:
+        # Check for contradictions
+        result = self.supabase.table('consistency_checks').select(
+            'contradiction_score, is_resolved'
+        ).eq('user_id', user_id).eq('is_resolved', False).execute()
+
+        if not result.data:
+            # User has enough answers and no contradictions
+            # Give high score that increases with more answers
+            if answer_count >= 30:
                 return 1.0
+            elif answer_count >= 20:
+                return 0.9
+            else:
+                return 0.8
 
-            avg_contradiction = sum(contradiction_scores) / len(contradiction_scores)
+        # Calculate average contradiction score
+        contradiction_scores = [
+            check['contradiction_score']
+            for check in result.data
+            if check['contradiction_score'] is not None
+        ]
 
-            # Penalize for number of contradictions too
-            count_penalty = min(0.1 * len(contradiction_scores), 0.3)
+        if not contradiction_scores:
+            return 0.8
 
-            consistency_score = 1.0 - avg_contradiction - count_penalty
+        avg_contradiction = sum(contradiction_scores) / len(contradiction_scores)
 
-            return max(0.0, consistency_score)
+        # Penalize for number of contradictions
+        count_penalty = min(0.1 * len(contradiction_scores), 0.3)
 
-        except Exception as e:
-            logger.error(f"Consistency score calculation failed: {e}")
-            return 1.0  # Default to no issues on error
+        consistency_score = 1.0 - avg_contradiction - count_penalty
+
+        return max(0.0, consistency_score)
 
     async def _calculate_behavioral_score(self, user_id: str) -> float:
         """
         Calculate behavioral trust score based on user actions
 
-        Negative signals:
-        - Frequent critical field changes
-        - Suspicious edit patterns
-        - Multiple high-risk events
+        Matches database function calculate_trust_score():
+        - New accounts start at 0.5 (50%) base score
+        - Build up with account age (max +0.3)
+        - Lose points for suspicious behavior
 
-        Positive signals:
-        - Account age
-        - Stable profile
+        New users must build trust over time!
         """
-        try:
-            # Get recent behavior logs (last 30 days)
-            thirty_days_ago = (datetime.now() - timedelta(days=30)).isoformat()
+        # Get account age first - this determines base score
+        profile_result = self.supabase.table('profiles').select(
+            'created_at'
+        ).eq('user_id', user_id).single().execute()
 
-            result = self.supabase.table('user_behavior_logs').select(
-                'event_type, risk_level, created_at'
-            ).eq('user_id', user_id).gte('created_at', thirty_days_ago).execute()
+        # Base score starts at 0.5 for new accounts
+        base_score = 0.5
+        age_bonus = 0.0
 
-            if not result.data:
-                return 1.0  # No negative behavior recorded
+        if profile_result.data:
+            created_at = datetime.fromisoformat(
+                profile_result.data['created_at'].replace('Z', '+00:00')
+            )
+            account_age_days = (datetime.now(created_at.tzinfo) - created_at).days
 
+            # Build trust over time
+            if account_age_days >= 180:  # 6+ months
+                age_bonus = 0.30
+            elif account_age_days >= 90:  # 3+ months
+                age_bonus = 0.20
+            elif account_age_days >= 30:  # 1+ month
+                age_bonus = 0.10
+            elif account_age_days >= 7:   # 1+ week
+                age_bonus = 0.05
+            # New accounts (< 7 days) get no bonus
+
+        # Check for negative behavior
+        thirty_days_ago = (datetime.now() - timedelta(days=30)).isoformat()
+        result = self.supabase.table('user_behavior_logs').select(
+            'event_type, risk_level, created_at'
+        ).eq('user_id', user_id).gte('created_at', thirty_days_ago).execute()
+
+        total_penalty = 0.0
+
+        if result.data:
             # Calculate risk penalties
             risk_penalties = {
                 'critical': 0.25,
@@ -361,131 +358,224 @@ class TrustScoreService:
                 'low': 0.01
             }
 
-            total_penalty = 0.0
-
             for log in result.data:
-                risk_level = log.get('risk_level', 'low')
-                penalty = risk_penalties.get(risk_level, 0.01)
+                risk_level = log['risk_level']
+                penalty = risk_penalties[risk_level]
                 total_penalty += penalty
 
-            # Cap total penalty at 0.8 (minimum score of 0.2)
-            total_penalty = min(total_penalty, 0.8)
+            # Cap total penalty at 0.4
+            total_penalty = min(total_penalty, 0.4)
 
-            # Get account age bonus
-            profile_result = self.supabase.table('profiles').select(
-                'created_at'
-            ).eq('user_id', user_id).single().execute()
+        # Final score: base + age bonus - penalties
+        behavioral_score = base_score + age_bonus - total_penalty
 
-            age_bonus = 0.0
-            if profile_result.data:
-                created_at = datetime.fromisoformat(
-                    profile_result.data['created_at'].replace('Z', '+00:00')
-                )
-                account_age_days = (datetime.now(created_at.tzinfo) - created_at).days
-
-                if account_age_days >= 180:
-                    age_bonus = 0.10
-                elif account_age_days >= 90:
-                    age_bonus = 0.05
-                elif account_age_days >= 30:
-                    age_bonus = 0.02
-
-            behavioral_score = 1.0 - total_penalty + age_bonus
-
-            return max(0.0, min(1.0, behavioral_score))
-
-        except Exception as e:
-            logger.error(f"Behavioral score calculation failed: {e}")
-            return 1.0
+        return max(0.0, min(1.0, behavioral_score))
 
     async def _calculate_completeness_score(self, user_id: str) -> float:
         """
         Calculate profile completeness score
 
-        Components:
+        Matches database function calculate_trust_score():
         - Basic profile fields (30%)
         - Questions answered (40%)
         - Family background (15%)
         - Documents uploaded (15%)
         """
-        try:
-            score = 0.0
+        score = 0.0
 
-            # 1. Profile fields (30%)
-            profile_result = self.supabase.table('profiles').select(
-                'real_name, height_cm, weight_kg, education_level, '
-                'university_name, employment_status, company_name, '
-                'job_title, annual_income_range, marital_status'
-            ).eq('user_id', user_id).single().execute()
+        # 1. Profile fields (30%)
+        profile_result = self.supabase.table('profiles').select(
+            'real_name, height_cm, weight_kg, education_level, '
+            'university_name, employment_status, company_name, '
+            'job_title, annual_income_range, marital_status'
+        ).eq('user_id', user_id).single().execute()
 
-            if profile_result.data:
-                profile = profile_result.data
-                required_fields = [
-                    'real_name', 'height_cm', 'education_level',
-                    'employment_status', 'annual_income_range', 'marital_status'
-                ]
-                optional_fields = [
-                    'weight_kg', 'university_name', 'company_name', 'job_title'
-                ]
+        if profile_result.data:
+            profile = profile_result.data
+            required_fields = [
+                'real_name', 'height_cm', 'education_level',
+                'employment_status', 'annual_income_range', 'marital_status'
+            ]
+            optional_fields = [
+                'weight_kg', 'university_name', 'company_name', 'job_title'
+            ]
 
-                # Required fields worth 20%
-                filled_required = sum(
-                    1 for field in required_fields
-                    if profile.get(field) is not None
-                )
-                score += (filled_required / len(required_fields)) * 0.20
+            # Required fields worth 20%
+            filled_required = sum(
+                1 for field in required_fields
+                if profile.get(field) is not None
+            )
+            score += (filled_required / len(required_fields)) * 0.20
 
-                # Optional fields worth 10%
-                filled_optional = sum(
-                    1 for field in optional_fields
-                    if profile.get(field) is not None
-                )
-                score += (filled_optional / len(optional_fields)) * 0.10
+            # Optional fields worth 10%
+            filled_optional = sum(
+                1 for field in optional_fields
+                if profile.get(field) is not None
+            )
+            score += (filled_optional / len(optional_fields)) * 0.10
 
-            # 2. Questions answered (40%)
-            answers_result = self.supabase.table('user_answers').select(
-                'question_id', count='exact'
-            ).eq('user_id', user_id).execute()
+        # 2. Questions answered (40%)
+        answers_result = self.supabase.table('user_answers').select(
+            'question_id', count='exact'
+        ).eq('user_id', user_id).execute()
 
-            if answers_result.count:
-                questions_score = min(answers_result.count / self.TOTAL_QUESTIONS, 1.0)
-                score += questions_score * 0.40
+        if answers_result.count:
+            questions_score = min(answers_result.count / self.TOTAL_QUESTIONS, 1.0)
+            score += questions_score * 0.40
 
-            # 3. Family background (15%)
-            family_result = self.supabase.table('user_family_background').select(
-                'father_occupation, mother_occupation, parents_status'
-            ).eq('user_id', user_id).execute()
+        # 3. Family background (15%)
+        family_result = self.supabase.table('user_family_background').select(
+            'father_occupation, mother_occupation, parents_status'
+        ).eq('user_id', user_id).execute()
 
-            if family_result.data:
-                family = family_result.data[0] if family_result.data else {}
-                family_fields = ['father_occupation', 'mother_occupation', 'parents_status']
-                filled_family = sum(
-                    1 for field in family_fields
-                    if family.get(field) is not None
-                )
-                score += (filled_family / len(family_fields)) * 0.15
+        if family_result.data:
+            family = family_result.data[0] if family_result.data else {}
+            family_fields = ['father_occupation', 'mother_occupation', 'parents_status']
+            filled_family = sum(
+                1 for field in family_fields
+                if family.get(field) is not None
+            )
+            score += (filled_family / len(family_fields)) * 0.15
 
-            # 4. Documents uploaded (15%)
-            docs_result = self.supabase.table('user_documents').select(
-                'document_type', count='exact'
-            ).eq('user_id', user_id).execute()
+        # 4. Documents uploaded (15%)
+        docs_result = self.supabase.table('user_documents').select(
+            'document_type', count='exact'
+        ).eq('user_id', user_id).execute()
 
-            if docs_result.count:
-                docs_score = min(docs_result.count / len(self.DOCUMENT_TYPES), 1.0)
-                score += docs_score * 0.15
+        if docs_result.count:
+            docs_score = min(docs_result.count / len(self.DOCUMENT_TYPES), 1.0)
+            score += docs_score * 0.15
 
-            return min(1.0, score)
+        return min(1.0, score)
 
-        except Exception as e:
-            logger.error(f"Completeness score calculation failed: {e}")
+    async def _calculate_photo_score(self, user_id: str) -> float:
+        """
+        Calculate photo verification score
+
+        Matches database function calculate_photo_verification_score():
+        - Checks photo_verifications table for most recent verified photo
+        - Scores based on quality and freshness (expiration)
+        """
+        result = self.supabase.table('photo_verifications').select(
+            'verified_at, verification_score, expires_at, verification_status'
+        ).eq('user_id', user_id).eq('verification_status', 'verified').order(
+            'verified_at', desc=True
+        ).limit(1).execute()
+
+        if not result.data:
             return 0.0
+
+        photo = result.data[0]
+        verification_score = photo['verification_score']
+        expires_at = datetime.fromisoformat(photo['expires_at'].replace('Z', '+00:00'))
+        now = datetime.now(expires_at.tzinfo)
+
+        # Score based on quality and freshness
+        if expires_at > now and verification_score >= 0.90:
+            return 1.0  # Recent + high quality
+        elif expires_at > now and verification_score >= 0.75:
+            return 0.8  # Recent + good quality
+        elif expires_at <= now:
+            return 0.5  # Expired - needs re-verification
+        else:
+            return 0.6
+
+    async def _calculate_social_score(self, user_id: str) -> float:
+        """
+        Calculate social verification score
+
+        Matches database function calculate_social_verification_score():
+        - LinkedIn: 40% + 10% bonus if account age > 2 years
+        - Instagram: 30% + 5% bonus if followers > 500
+        - KakaoTalk: 20%
+        - Naver: 10%
+        - Verified accounts: +15% bonus
+        """
+        result = self.supabase.table('social_verifications').select(
+            'platform, account_age_days, follower_count, is_verified_account, verification_status'
+        ).eq('user_id', user_id).eq('verification_status', 'verified').execute()
+
+        if not result.data:
+            return 0.0
+
+        score = 0.0
+
+        for social in result.data:
+            platform = social['platform']
+            account_age_days = social.get('account_age_days', 0)
+            follower_count = social.get('follower_count', 0)
+            is_verified = social.get('is_verified_account', False)
+
+            # Base platform scores
+            if platform == 'linkedin':
+                score += 0.40
+                if account_age_days > 730:  # > 2 years
+                    score += 0.10
+            elif platform == 'instagram':
+                score += 0.30
+                if follower_count > 500:
+                    score += 0.05
+            elif platform == 'kakao':
+                score += 0.20
+            elif platform == 'naver':
+                score += 0.10
+
+            # Verified account bonus
+            if is_verified:
+                score += 0.15
+
+        return min(1.0, score)
+
+    async def _calculate_reputation_score(self, user_id: str) -> float:
+        """
+        Calculate reputation score
+
+        Matches database function calculate_reputation_score():
+        - Starts at 1.0
+        - Confirmed reports: -0.20 each (last 180 days)
+        - Ghosting rate: -0.10
+        - Positive outcome rate: +0.10
+        """
+        score = 1.0
+
+        # Confirmed reports (severe penalty: -0.20 each)
+        six_months_ago = (datetime.now() - timedelta(days=180)).isoformat()
+        reports_result = self.supabase.table('user_reports').select(
+            'id', count='exact'
+        ).eq('reported_user_id', user_id).eq('status', 'confirmed').gte(
+            'created_at', six_months_ago
+        ).execute()
+
+        confirmed_reports = reports_result.count if reports_result.count else 0
+        score -= confirmed_reports * 0.20
+
+        # Ghosting rate and positive outcomes from conversation analytics
+        analytics_result = self.supabase.table('conversation_analytics').select(
+            'ghosting_pattern, positive_outcome, total_messages'
+        ).eq('user_id', user_id).execute()
+
+        if analytics_result.data:
+            # Ghosting rate (only conversations with >= 10 messages)
+            relevant_convos = [c for c in analytics_result.data if c.get('total_messages', 0) >= 10]
+            if relevant_convos:
+                ghosting_count = sum(1 for c in relevant_convos if c.get('ghosting_pattern', False))
+                ghosting_rate = ghosting_count / len(relevant_convos)
+                score -= ghosting_rate * 0.10
+
+            # Positive outcome rate
+            if analytics_result.data:
+                positive_count = sum(1 for c in analytics_result.data if c.get('positive_outcome', False))
+                positive_rate = positive_count / len(analytics_result.data)
+                score += positive_rate * 0.10
+
+        return max(0.0, min(1.0, score))
 
     def _determine_tier(self, total_score: float) -> str:
         """Determine trust tier based on total score"""
         for tier, threshold in self.TIER_THRESHOLDS.items():
             if total_score >= threshold:
                 return tier.value
-        return TrustTier.UNVERIFIED.value
+        return TrustTier.PEBBLE.value
 
     async def _store_trust_score(
         self,
@@ -497,135 +587,107 @@ class TrustScoreService:
         total_score: float,
         trust_tier: str
     ):
-        """Store calculated trust score in database"""
-        try:
-            self.supabase.table('user_trust_scores').upsert({
-                'user_id': user_id,
-                'document_score': doc_score,
-                'consistency_score': consistency_score,
-                'behavioral_score': behavioral_score,
-                'completeness_score': completeness_score,
-                'total_trust_score': total_score,
-                'trust_tier': trust_tier,
-                'weights_used': self.WEIGHTS,
-                'calculation_details': {
-                    'method': 'manual',
-                    'calculated_at': datetime.now().isoformat()
-                },
-                'last_calculated_at': datetime.now().isoformat()
-            }).execute()
+        """
+        Store calculated trust score in database
 
-            # Also update profile
-            self.supabase.table('profiles').update({
-                'trust_tier': trust_tier
-            }).eq('user_id', user_id).execute()
+        Matches database schema: only stores 4 main scores (document, consistency, behavioral, completeness)
+        Photo, social, and reputation scores are calculated but not persisted in table
+        """
+        self.supabase.table('user_trust_scores').upsert({
+            'user_id': user_id,
+            'document_score': doc_score,
+            'consistency_score': consistency_score,
+            'behavioral_score': behavioral_score,
+            'completeness_score': completeness_score,
+            'total_trust_score': total_score,
+            'trust_tier': trust_tier,
+            'last_calculated_at': datetime.now().isoformat()
+        }).execute()
 
-        except Exception as e:
-            logger.error(f"Failed to store trust score: {e}")
+        # Also update profile
+        self.supabase.table('profiles').update({
+            'trust_tier': trust_tier
+        }).eq('user_id', user_id).execute()
 
     async def get_trust_score(self, user_id: str) -> Optional[TrustScoreResponse]:
         """
         Get existing trust score for a user
         Returns None if not calculated yet
+        Raises exception on database errors - no fallback
         """
-        try:
-            result = self.supabase.table('user_trust_scores').select(
-                '*'
-            ).eq('user_id', user_id).single().execute()
+        result = self.supabase.table('user_trust_scores').select(
+            '*'
+        ).eq('user_id', user_id).single().execute()
 
-            if result.data:
-                data = result.data
-                return TrustScoreResponse(
-                    user_id=user_id,
-                    document_score=data['document_score'],
-                    consistency_score=data['consistency_score'],
-                    behavioral_score=data['behavioral_score'],
-                    completeness_score=data['completeness_score'],
-                    total_trust_score=data['total_trust_score'],
-                    trust_tier=data['trust_tier'],
-                    calculation_details=data.get('calculation_details', {}),
-                    last_calculated_at=datetime.fromisoformat(
-                        data['last_calculated_at'].replace('Z', '+00:00')
-                    )
-                )
-
+        if not result.data:
             return None
 
-        except Exception as e:
-            logger.error(f"Failed to get trust score for user {user_id}: {e}")
-            return None
+        data = result.data
+        return TrustScoreResponse(
+            user_id=user_id,
+            document_score=data['document_score'],
+            consistency_score=data['consistency_score'],
+            behavioral_score=data['behavioral_score'],
+            completeness_score=data['completeness_score'],
+            total_trust_score=data['total_trust_score'],
+            trust_tier=data['trust_tier'],
+            calculation_details=data['calculation_details'],
+            last_calculated_at=datetime.fromisoformat(
+                data['last_calculated_at'].replace('Z', '+00:00')
+            )
+        )
 
     async def get_trust_summary(self, user_id: str) -> TrustSummary:
         """
         Get simplified trust summary for API responses
+        Raises exception on errors - no fallback logic
         """
-        try:
-            # Use RPC function
-            result = self.supabase.rpc('get_user_trust_summary', {
-                'p_user_id': user_id
-            }).execute()
+        # Use RPC function
+        result = self.supabase.rpc('get_user_trust_summary', {
+            'p_user_id': user_id
+        }).execute()
 
-            if result.data:
-                data = result.data
-                verification_status = data.get('verification_status', {})
+        # No fallback - will raise if data is missing
+        data = result.data
+        verification_status = data['verification_status']
 
-                verified_items = []
-                if verification_status.get('id_verified'):
-                    verified_items.append('신분증')
-                if verification_status.get('education_verified'):
-                    verified_items.append('학력')
-                if verification_status.get('income_verified'):
-                    verified_items.append('소득')
-                if verification_status.get('employment_verified'):
-                    verified_items.append('재직')
-                if verification_status.get('phone_verified'):
-                    verified_items.append('전화번호')
+        verified_items = []
+        if verification_status['id_verified']:
+            verified_items.append('신분증')
+        if verification_status['education_verified']:
+            verified_items.append('학력')
+        if verification_status['income_verified']:
+            verified_items.append('소득')
+        if verification_status['employment_verified']:
+            verified_items.append('재직')
+        if verification_status['phone_verified']:
+            verified_items.append('전화번호')
 
-                trust_tier = data.get('trust_tier', 'unverified')
+        trust_tier = data['trust_tier']
 
-                return TrustSummary(
-                    trust_score=data.get('trust_score', 0),
-                    trust_tier=trust_tier,
-                    verified_items=verified_items,
-                    profile_completeness=data.get('component_scores', {}).get('completeness', 0),
-                    is_matching_enabled=trust_tier != 'unverified'
-                )
-
-            # Default response
-            return TrustSummary(
-                trust_score=0,
-                trust_tier='unverified',
-                verified_items=[],
-                profile_completeness=0,
-                is_matching_enabled=False
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to get trust summary: {e}")
-            return TrustSummary(
-                trust_score=0,
-                trust_tier='unverified',
-                verified_items=[],
-                profile_completeness=0,
-                is_matching_enabled=False
-            )
+        return TrustSummary(
+            trust_score=data['trust_score'],
+            trust_tier=trust_tier,
+            verified_items=verified_items,
+            profile_completeness=data['component_scores']['completeness'],
+            is_matching_enabled=trust_tier != 'pebble'
+        )
 
     async def get_tier_benefits(self, trust_tier: str) -> Dict[str, Any]:
         """
         Get benefits associated with a trust tier
         """
-        tier = TrustTier(trust_tier) if trust_tier in [t.value for t in TrustTier] else TrustTier.UNVERIFIED
-        return self.TIER_BENEFITS.get(tier, self.TIER_BENEFITS[TrustTier.UNVERIFIED])
+        # No fallback - will raise ValueError if invalid tier
+        tier = TrustTier(trust_tier)
+        return self.TIER_BENEFITS[tier]
 
     async def get_minimum_tier_for_matching(self, user_tier: str) -> List[str]:
         """
         Get minimum tiers that a user can see in matches
         Higher tier users see only similar or higher tier profiles
         """
-        tier_order = ['unverified', 'bronze', 'silver', 'gold', 'platinum']
-
         benefits = await self.get_tier_benefits(user_tier)
-        return benefits.get('can_see_tiers', [])
+        return benefits['can_see_tiers']
 
     async def log_behavior(
         self,

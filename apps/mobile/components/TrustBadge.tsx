@@ -3,16 +3,17 @@
  * FLIO의 바다 보물 등급 시스템
  *
  * Tiers (Ocean Treasure Theme):
- * - Coral (🪸): 산호 - 60-100% (Highest tier)
- * - Pearl (🫧): 진주 - 40-59% (Silver quality)
- * - Shell (🐚): 조개 - 20-39% (Bronze quality)
- * - Pebble (🪨): 조약돌 - 0-19% (Unverified)
+ * - Diamond (💎): 다이아 - 80-100% (Elite)
+ * - Coral (🪸): 산호 - 60-79% (Premium)
+ * - Pearl (🫧): 진주 - 40-59% (Standard)
+ * - Shell (🐚): 조개 - 20-39% (Basic)
+ * - Pebble (🪨): 조약돌 - 0-19% (Starter)
  */
 
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 
-type TrustTier = 'coral' | 'pearl' | 'shell' | 'pebble' | 'gold' | 'silver' | 'bronze' | 'unverified';
+type TrustTier = 'diamond' | 'coral' | 'pearl' | 'shell' | 'pebble';
 type BadgeSize = 'small' | 'medium' | 'large';
 
 interface TrustBadgeProps {
@@ -32,6 +33,14 @@ interface BadgeConfig {
 }
 
 const BADGE_CONFIGS: Record<TrustTier, BadgeConfig> = {
+  diamond: {
+    emoji: '💎',
+    color: '#1E3A8A',
+    backgroundColor: 'rgba(147, 197, 253, 0.25)',
+    borderColor: '#93C5FD',
+    label: '다이아 회원',
+    labelShort: '다이아',
+  },
   coral: {
     emoji: '🪸',
     color: '#92400E',
@@ -57,38 +66,6 @@ const BADGE_CONFIGS: Record<TrustTier, BadgeConfig> = {
     labelShort: '조개',
   },
   pebble: {
-    emoji: '🪨',
-    color: '#6B7280',
-    backgroundColor: 'rgba(158, 158, 158, 0.15)',
-    borderColor: '#9E9E9E',
-    label: '조약돌 회원',
-    labelShort: '조약돌',
-  },
-  gold: {
-    emoji: '🪸',
-    color: '#92400E',
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    borderColor: '#FFD700',
-    label: '산호 회원',
-    labelShort: '산호',
-  },
-  silver: {
-    emoji: '🫧',
-    color: '#1F2937',
-    backgroundColor: 'rgba(192, 192, 192, 0.25)',
-    borderColor: '#C0C0C0',
-    label: '진주 회원',
-    labelShort: '진주',
-  },
-  bronze: {
-    emoji: '🐚',
-    color: '#78350F',
-    backgroundColor: 'rgba(205, 127, 50, 0.2)',
-    borderColor: '#CD7F32',
-    label: '조개 회원',
-    labelShort: '조개',
-  },
-  unverified: {
     emoji: '🪨',
     color: '#6B7280',
     backgroundColor: 'rgba(158, 158, 158, 0.15)',
@@ -252,9 +229,10 @@ export function getBadgeConfig(tier: TrustTier): BadgeConfig {
 /**
  * Get tier from score
  * Helper function to determine tier from trust score
- * Ocean Pearl Theme: 조약돌 → 조개 → 진주 → 산호
+ * Ocean Pearl Theme: 조약돌 → 조개 → 진주 → 산호 → 다이아
  */
 export function getTierFromScore(score: number): TrustTier {
+  if (score >= 0.80) return 'diamond';
   if (score >= 0.60) return 'coral';
   if (score >= 0.40) return 'pearl';
   if (score >= 0.20) return 'shell';

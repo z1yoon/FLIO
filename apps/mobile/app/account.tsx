@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
-  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -15,7 +14,6 @@ import { router } from 'expo-router';
 
 import { getCurrentUserId, supabase } from '../services/supabase/client';
 import { FLIOAlertAPI } from '../components/FLIOAlert';
-import VerificationCenter from '../components/VerificationCenter';
 import TrustBadge, { getTierFromScore } from '../components/TrustBadge';
 
 /**
@@ -25,7 +23,7 @@ import TrustBadge, { getTierFromScore } from '../components/TrustBadge';
 export default function AccountScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [showVerificationCenter, setShowVerificationCenter] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
   const [trustScore, setTrustScore] = useState(0);
   const [currentTier, setCurrentTier] = useState<'pebble' | 'shell' | 'pearl' | 'coral'>('pebble');
   const [verifiedDocuments, setVerifiedDocuments] = useState<string[]>([]);
@@ -39,6 +37,19 @@ export default function AccountScreen() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user?.email) {
           setUserEmail(user.email);
+        }
+
+        // Fetch user profile for name
+        if (userId) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', userId)
+            .single();
+
+          if (profileData?.name) {
+            setUserName(profileData.name);
+          }
         }
 
         // Fetch trust score
@@ -107,16 +118,6 @@ export default function AccountScreen() {
     router.back();
   };
 
-  const handleVerifyDocument = (documentType: string) => {
-    console.log('📄 Document verification clicked:', documentType);
-    // Close the verification center modal
-    setShowVerificationCenter(false);
-    // Navigate to standalone document verification screen
-    setTimeout(() => {
-      router.push('/document-verification');
-    }, 300);
-  };
-
   const getTierKoreanName = (tier: string) => {
     const names: Record<string, string> = {
       pebble: '조약돌',
@@ -127,19 +128,42 @@ export default function AccountScreen() {
     return names[tier] || '조약돌';
   };
 
+  const getTierBenefits = (tier: string): string[] => {
+    const benefits: Record<string, string[]> = {
+      pebble: [
+        '하루 3명/일 매칭',
+        '조약돌 회원만 매칭',
+        '하루 3회 조회',
+        '제한된 기능'
+      ],
+      shell: [
+        '하루 5명/일 매칭',
+        '조개급 이하 회원 매칭',
+        '하루 5회 조회',
+        '기본 기능 이용'
+      ],
+      pearl: [
+        '하루 8명/일 매칭',
+        '진주급 이하 회원 매칭',
+        '하루 10회 조회',
+        '고급 필터 사용'
+      ],
+      coral: [
+        '무제한 매칭',
+        '모든 회원 매칭',
+        '무제한 조회',
+        '프리미엄 기능 전체'
+      ]
+    };
+    return benefits[tier] || benefits['pebble'];
+  };
+
   const menuItems = [
     {
       icon: 'person-circle-outline',
       title: '프로필 보기',
       subtitle: '내 답변 확인 및 수정',
       onPress: () => router.push('/(tabs)/profile'),
-    },
-    {
-      icon: 'diamond-outline',
-      title: '등급 & 업그레이드',
-      subtitle: '요금제 확인 및 등급 업그레이드',
-      onPress: () => router.push('/tier'),
-      highlight: true,
     },
     {
       icon: 'settings-outline',
@@ -206,28 +230,27 @@ export default function AccountScreen() {
         </View>
 
         {/* Verification Card */}
-        <TouchableOpacity
-          style={styles.verificationCard}
-          onPress={() => setShowVerificationCenter(true)}
-          activeOpacity={0.8}
-        >
+        <View style={styles.verificationCard}>
           <View style={styles.verificationHeader}>
             <View style={styles.verificationTitleRow}>
-              <Text style={styles.verificationTitle}>신뢰도 인증</Text>
-              <TrustBadge tier={currentTier} size="small" />
+              <Text style={styles.verificationTitle}>
+                {userName || userEmail?.split('@')[0] || '회원'}님의 등급
+              </Text>
             </View>
-            <TouchableOpacity
-              style={styles.verificationInfoButton}
-              onPress={() => setShowVerificationCenter(true)}
-            >
-              <Ionicons name="information-circle-outline" size={20} color="#4FD1C7" />
-            </TouchableOpacity>
+            <TrustBadge tier={currentTier} size="medium" />
           </View>
 
-          <View style={styles.trustScoreRow}>
+          <TouchableOpacity
+            style={styles.trustScoreRow}
+            onPress={() => router.push('/trust-breakdown')}
+            activeOpacity={0.7}
+          >
             <Text style={styles.trustScoreLabel}>현재 신뢰도</Text>
-            <Text style={styles.trustScoreValue}>{trustScore}%</Text>
-          </View>
+            <View style={styles.trustScoreRight}>
+              <Text style={styles.trustScoreValue}>{trustScore}%</Text>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.5)" />
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.progressBarContainer}>
             <View style={styles.progressBar}>
@@ -244,47 +267,53 @@ export default function AccountScreen() {
             <View style={styles.verificationStat}>
               <Ionicons name="shield-checkmark" size={16} color="#4FD1C7" />
               <Text style={styles.verificationStatText}>
-                {verifiedDocuments.length}개 인증완료
+                문서인증 {verifiedDocuments.length}/4
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
           </View>
 
-          {trustScore < 80 && (
-            <View style={styles.upgradeHint}>
-              <Ionicons name="arrow-up-circle" size={16} color="#00FFC8" />
-              <Text style={styles.upgradeHintText}>
-                문서 인증으로 신뢰도를 높이세요
-              </Text>
+          <TouchableOpacity
+            style={styles.upgradePrompt}
+            onPress={() => router.push('/document-verification')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-up-circle" size={18} color="#00FFC8" />
+            <Text style={styles.upgradePromptText}>
+              문서 인증하여 신뢰도 올리기
+            </Text>
+          </TouchableOpacity>
+
+          {/* Tier Benefits */}
+          <View style={styles.tierBenefits}>
+            <Text style={styles.tierBenefitsTitle}>현재 혜택</Text>
+            {getTierBenefits(currentTier).map((benefit, index) => (
+              <View key={index} style={styles.benefitItem}>
+                <Ionicons name="checkmark-circle" size={14} color="#4FD1C7" />
+                <Text style={styles.benefitText}>{benefit}</Text>
+              </View>
+            ))}
+          </View>
+
+          {currentTier !== 'coral' && (
+            <View style={styles.upgradeCtaContainer}>
+              <TouchableOpacity
+                style={styles.upgradeCtaButton}
+                onPress={() => router.push('/tier')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#00FFC8', '#00D4AA']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.upgradeCtaGradient}
+                >
+                  <Ionicons name="diamond" size={16} color="#FFFFFF" />
+                  <Text style={styles.upgradeCtaText}>등급 업그레이드</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
           )}
-
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={styles.verifyButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                router.push('/document-verification');
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="shield-checkmark-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.verifyButtonText}>인증하기</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.tierButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                router.push('/tier');
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="diamond-outline" size={18} color="#4FD1C7" />
-              <Text style={styles.tierButtonText}>등급 보기</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+        </View>
 
         {/* Menu Items */}
         <View style={styles.menuSection}>
@@ -334,22 +363,6 @@ export default function AccountScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* Verification Center Modal */}
-      <Modal
-        visible={showVerificationCenter}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setShowVerificationCenter(false)}
-      >
-        <VerificationCenter
-          currentTier={currentTier}
-          trustScore={trustScore}
-          verifiedDocuments={verifiedDocuments}
-          onVerifyDocument={handleVerifyDocument}
-          onClose={() => setShowVerificationCenter(false)}
-        />
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -503,32 +516,29 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   verificationTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flex: 1,
   },
   verificationTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  verificationInfoButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(79,209,199,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   trustScoreRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 16,
     marginBottom: 12,
+    paddingVertical: 4,
   },
   trustScoreLabel: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
+  },
+  trustScoreRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   trustScoreValue: {
     fontSize: 24,
@@ -565,54 +575,65 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     fontWeight: '500',
   },
-  upgradeHint: {
+  upgradePrompt: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-  },
-  upgradeHintText: {
-    fontSize: 13,
-    color: '#00FFC8',
-    fontWeight: '600',
-  },
-  buttonRow: {
-    flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(0,255,200,0.15)',
+    borderRadius: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,255,200,0.3)',
   },
-  verifyButton: {
+  upgradePromptText: {
+    fontSize: 14,
+    color: '#00FFC8',
+    fontWeight: '700',
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4FD1C7',
-    borderRadius: 12,
-    paddingVertical: 12,
-    gap: 6,
   },
-  verifyButtonText: {
+  tierBenefits: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  tierBenefitsTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
+    marginBottom: 12,
   },
-  tierButton: {
+  benefitItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  benefitText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
     flex: 1,
+  },
+  upgradeCtaContainer: {
+    marginTop: 8,
+  },
+  upgradeCtaButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  upgradeCtaGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(79,209,199,0.3)',
-    borderRadius: 12,
-    paddingVertical: 12,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(79,209,199,0.4)',
+    paddingVertical: 14,
+    gap: 8,
   },
-  tierButtonText: {
-    fontSize: 14,
+  upgradeCtaText: {
+    fontSize: 15,
     fontWeight: '700',
-    color: '#4FD1C7',
+    color: '#FFFFFF',
   },
 });

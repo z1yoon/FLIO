@@ -176,13 +176,15 @@ export default function QuestionsScreen() {
       setCurrentQuestionIndex(firstUnansweredIndex);
       console.log(`📝 Loaded ${allQuestions.length} total questions, starting at question ${firstUnansweredIndex + 1}`);
 
-      // Show resumption message for existing users
+      // Show resumption message for existing users (delayed to avoid modal conflicts)
       if (answeredCount > 0) {
-        FLIOAlertAPI.alert(
-          '프로필 완성 재개',
-          `질문 ${firstUnansweredIndex + 1}번부터 이어서 진행합니다.`,
-          [{ text: '계속하기', onPress: () => {} }]
-        );
+        setTimeout(() => {
+          FLIOAlertAPI.alert(
+            '프로필 완성 재개',
+            `질문 ${firstUnansweredIndex + 1}번부터 이어서 진행합니다.`,
+            [{ text: '계속하기', onPress: () => {} }]
+          );
+        }, 500);
       }
     } catch (error) {
       console.error('❌ Failed to load questions from Supabase:', error);
