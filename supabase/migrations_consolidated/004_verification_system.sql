@@ -163,37 +163,9 @@ CREATE INDEX IF NOT EXISTS idx_social_verif_user ON social_verifications(user_id
 CREATE INDEX IF NOT EXISTS idx_social_verif_platform ON social_verifications(platform);
 
 -- ===================
--- 5. EXTENDED PROFILE DATA
+-- 5. FAMILY BACKGROUND
 -- ===================
-
--- 5.1 Identity fields
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS real_name VARCHAR(50);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS real_name_verified BOOLEAN DEFAULT false;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS height_cm INTEGER;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight_kg INTEGER;
-
--- 5.2 Education fields
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS education_level VARCHAR(50);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS university_name VARCHAR(100);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS major VARCHAR(100);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS graduation_year INTEGER;
-
--- 5.3 Career & Income fields
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employment_status VARCHAR(50);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS company_name VARCHAR(100);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS job_title VARCHAR(100);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS industry VARCHAR(100);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS annual_income_range VARCHAR(50);
-
--- 5.4 Marital History
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS marital_status VARCHAR(20) DEFAULT '미혼';
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS divorce_reason TEXT;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS has_children BOOLEAN DEFAULT false;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS children_count INTEGER DEFAULT 0;
-
--- ===================
--- 6. FAMILY BACKGROUND
--- ===================
+-- Note: Profile columns (identity, education, career, marital status) are defined in 001_core_schema.sql
 
 CREATE TABLE IF NOT EXISTS user_family_background (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -290,6 +262,11 @@ CREATE TABLE IF NOT EXISTS user_behavior_logs (
     -- Risk assessment
     risk_level VARCHAR(20) DEFAULT 'low',
     risk_reason TEXT,
+
+    -- Engagement metrics (for trust score behavioral component)
+    engagement_quality FLOAT,
+    response_time_seconds INTEGER,
+    message_length INTEGER,
 
     -- Session context
     session_id VARCHAR(100),

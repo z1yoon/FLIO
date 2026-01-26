@@ -49,14 +49,65 @@ export interface UserProfile {
 }
 
 class SupabaseQuestionService {
-  private readonly TOTAL_QUESTIONS = 44;  // Updated: 41 choice + 3 text (research-optimized 2024)
-  private readonly MIN_QUESTIONS_FOR_MATCHING = 44;  // Require ALL questions before matching
+  private totalQuestions: number = 40;  // Default, will be fetched dynamically
+  private questionCountCache: { count: number; timestamp: number } | null = null;
+  private readonly CACHE_DURATION_MS = 300000;  // 5 minutes cache
+
+  /**
+   * Get total question count from database (cached for 5 minutes)
+   */
+  private async getTotalQuestions(): Promise<number> {
+    const now = Date.now();
+
+    // Return cached value if still valid
+    if (this.questionCountCache && now - this.questionCountCache.timestamp < this.CACHE_DURATION_MS) {
+      return this.questionCountCache.count;
+    }
+
+    try {
+      // Fetch from system_settings table
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'active_question_count')
+        .single();
+
+      if (data && !error) {
+        const count = data.value.count;
+        this.questionCountCache = { count, timestamp: now };
+        this.totalQuestions = count;
+        return count;
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not fetch from system_settings, counting directly');
+    }
+
+    // Fallback: count directly from questions table
+    try {
+      const { count, error } = await supabase
+        .from('questions')
+        .select('id', { count: 'exact', head: true });
+
+      if (!error && count !== null) {
+        this.questionCountCache = { count, timestamp: now };
+        this.totalQuestions = count;
+        return count;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get question count:', error);
+    }
+
+    // Final fallback to cached value or default
+    return this.totalQuestions;
+  }
 
   /**
    * Load all questions from Supabase database
    * Production implementation with proper error handling
    */
   async getAllQuestions(userId?: string): Promise<Question[]> {
+    // Update question count cache
+    await this.getTotalQuestions();
     try {
       console.log('🔄 Loading questions from Supabase database...');
 
@@ -64,7 +115,7 @@ class SupabaseQuestionService {
       if (userId) {
         const { data, error } = await supabase.rpc('get_questions_for_user', {
           p_user_id: userId,
-          p_limit: this.TOTAL_QUESTIONS
+          p_limit: this.totalQuestions
         });
 
         if (error) {
@@ -78,7 +129,7 @@ class SupabaseQuestionService {
         }
       }
 
-      // Direct query for all active questions
+      // Direct query for all questions
       const { data, error } = await supabase
         .from('questions')
         .select(`
@@ -94,7 +145,6 @@ class SupabaseQuestionService {
           placeholder,
           max_length
         `)
-        .eq('is_active', true)
         // Ensure static (choice) questions load first, text last
         .order('answer_type', { ascending: true })
         .order('effectiveness_score', { ascending: false })
@@ -125,6 +175,9 @@ class SupabaseQuestionService {
     try {
       console.log(`🔄 Loading unanswered questions for user: ${userId}`);
 
+      // Update question count cache
+      await this.getTotalQuestions();
+
       // Get user's answered questions
       const { data: answeredQuestions, error: answersError } = await supabase
         .from('user_answers')
@@ -154,8 +207,7 @@ class SupabaseQuestionService {
           can_be_dealbreaker,
           placeholder,
           max_length
-        `)
-        .eq('is_active', true);
+        `);
 
       // Only apply NOT IN filter if there are answered questions
       if (answeredIds.length > 0) {
@@ -266,6 +318,9 @@ class SupabaseQuestionService {
     try {
       console.log(`📋 Loading user profile: ${userId}`);
 
+      // Update question count cache
+      const totalQuestions = await this.getTotalQuestions();
+
       // Get user's answers with question details
       const { data: answersData, error: answersError } = await supabase
         .from('user_answers')
@@ -338,10 +393,10 @@ class SupabaseQuestionService {
         .single();
 
       const hasEmbedding = profileData?.profile_embedding !== null;
-      
+
       // Calculate completion metrics
-      const completionPercentage = Math.min(100, (totalAnswers / this.TOTAL_QUESTIONS) * 100);
-      const canStartMatching = totalAnswers >= this.MIN_QUESTIONS_FOR_MATCHING;
+      const completionPercentage = Math.min(100, (totalAnswers / totalQuestions) * 100);
+      const canStartMatching = totalAnswers >= totalQuestions;  // Must answer all questions
 
       const profile: UserProfile = {
         user_id: userId,
@@ -356,14 +411,14 @@ class SupabaseQuestionService {
             : 'Complete more questions to enable matching'
         },
         profile_completion: {
-          total_questions: this.TOTAL_QUESTIONS,
+          total_questions: totalQuestions,
           answered_questions: totalAnswers,
           completion_percentage: completionPercentage,
           can_start_matching: canStartMatching
         }
       };
 
-      console.log(`✅ Profile loaded: ${totalAnswers}/${this.TOTAL_QUESTIONS} questions (${completionPercentage.toFixed(1)}%)`);
+      console.log(`✅ Profile loaded: ${totalAnswers}/${totalQuestions} questions (${completionPercentage.toFixed(1)}%)`);
       
       return profile;
 
@@ -462,6 +517,9 @@ class SupabaseQuestionService {
     percentage: number;
   }> {
     try {
+      // Update question count cache
+      const totalQuestions = await this.getTotalQuestions();
+
       const { count, error } = await supabase
         .from('user_answers')
         .select('id', { count: 'exact', head: true })
@@ -473,19 +531,20 @@ class SupabaseQuestionService {
       }
 
       const answered = count || 0;
-      const percentage = (answered / this.TOTAL_QUESTIONS) * 100;
+      const percentage = (answered / totalQuestions) * 100;
 
       return {
         answered,
-        total: this.TOTAL_QUESTIONS,
+        total: totalQuestions,
         percentage
       };
 
     } catch (error) {
       console.error('❌ Failed to get user progress:', error);
+      const totalQuestions = this.totalQuestions;  // Use cached value
       return {
         answered: 0,
-        total: this.TOTAL_QUESTIONS,
+        total: totalQuestions,
         percentage: 0
       };
     }
@@ -563,8 +622,7 @@ class SupabaseQuestionService {
       // Test questions availability
       const { count, error: countError } = await supabase
         .from('questions')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true);
+        .select('id', { count: 'exact', head: true });
 
       if (countError) {
         return {

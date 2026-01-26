@@ -71,7 +71,11 @@
       "Bash(docker-compose restart:*)",
       "Bash(python3:*)",
       "Bash(docker-compose logs:*)",
-      "mcp__supabase__list_tables"
+      "mcp__supabase__list_tables",
+      "Bash(supabase status:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(for f in *.sql)"
     ],
     "deny": []
   },

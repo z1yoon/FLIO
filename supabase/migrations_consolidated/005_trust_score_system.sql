@@ -1,32 +1,19 @@
 -- ==========================================
--- FLIO Trust Score System
+-- FLIO Trust Score & Tier-Based Matching System
 -- ==========================================
--- Description: Complete Trust Score and Matching System
--- Date: 2026-01-22
---
--- FEATURES:
--- 1. Weighted question scoring (important questions weighted higher)
--- 2. **Photo verification REQUIRED** (20% weight) - Baseline security
--- 3. Social verification (LinkedIn/Instagram/Kakao/Naver, 10% weight)
--- 4. Enhanced behavioral scoring with engagement metrics (15% weight)
--- 5. Community reputation system (5% weight)
--- 6. **5-TIER SYSTEM**: Diamond/Coral/Pearl/Shell/Pebble
--- 7. Hybrid matching algorithm: embeddings (60%) + weighted answers (40%)
---
--- TRUST SCORE COMPONENTS:
--- Document (25%), Photo (20% REQUIRED), Consistency (15%), Behavioral (15%),
--- Social (10%), Completeness (10%), Reputation (5%)
+-- Consolidates: 009_tier_based_matching + 010_trust_score_system + 012_fix_trust_score_defaults
+-- Complete 5-tier trust score system with verification and matching
 -- ==========================================
 
 -- ==========================================
--- PART 1: 5-TIER SYSTEM (Keep Diamond)
+-- PART 1: 5-TIER SYSTEM CONFIGURATION
 -- ==========================================
 
--- Update tier calculation function to 5 tiers
+-- Tier calculation function
 CREATE OR REPLACE FUNCTION calculate_tier_from_score(score DECIMAL)
 RETURNS TEXT AS $$
 BEGIN
-  -- 5-tier system (KEEPING DIAMOND for elite users)
+  -- 5-tier system: Diamond/Coral/Pearl/Shell/Pebble
   IF score >= 0.80 THEN RETURN 'diamond';    -- 80-100%: ₩59,900/month, 30 matches/day + Priority
   ELSIF score >= 0.60 THEN RETURN 'coral';    -- 60-79%:  ₩39,900/month, 20 matches/day
   ELSIF score >= 0.40 THEN RETURN 'pearl';    -- 40-59%:  ₩19,900/month, 15 matches/day
@@ -36,7 +23,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Update default tier preferences (5 tiers)
+-- Default tier preferences (who each tier can match with)
 CREATE OR REPLACE FUNCTION get_default_tier_preferences(current_tier TEXT)
 RETURNS TEXT[] AS $$
 BEGIN
@@ -50,14 +37,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- ==========================================
--- PART 2: PHOTO VERIFICATION SYSTEM (REQUIRED)
--- ==========================================
--- Note: photo_verifications table created in migration 007
+-- Note: tier_preferences column already defined in profiles table (001_core_schema.sql)
 
--- Add photo_verified flag to profiles (for quick access control)
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS photo_verified BOOLEAN DEFAULT false;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS photo_verified_at TIMESTAMPTZ;
+-- Create indexes for tier-based queries
+CREATE INDEX IF NOT EXISTS idx_profiles_trust_tier ON profiles(trust_tier);
+CREATE INDEX IF NOT EXISTS idx_profiles_tier_preferences ON profiles USING GIN(tier_preferences);
+
+-- ==========================================
+-- PART 2: PHOTO VERIFICATION SYSTEM (REQUIRED - 20% weight)
+-- ==========================================
 
 -- Photo verification score function
 CREATE OR REPLACE FUNCTION calculate_photo_verification_score(p_user_id UUID)
@@ -107,7 +95,6 @@ $$ LANGUAGE plpgsql;
 -- ==========================================
 -- PART 3: SOCIAL VERIFICATION SYSTEM (10% weight)
 -- ==========================================
--- Note: social_verifications table created in migration 007
 
 CREATE OR REPLACE FUNCTION calculate_social_verification_score(p_user_id UUID)
 RETURNS FLOAT AS $$
@@ -132,14 +119,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- PART 4: ENHANCED BEHAVIORAL & REPUTATION SYSTEM (20% total)
+-- PART 4: BEHAVIORAL & REPUTATION SYSTEM (20% total)
 -- ==========================================
-
--- Extend user_behavior_logs
-ALTER TABLE user_behavior_logs
-ADD COLUMN IF NOT EXISTS engagement_quality FLOAT,
-ADD COLUMN IF NOT EXISTS response_time_seconds INTEGER,
-ADD COLUMN IF NOT EXISTS message_length INTEGER;
+-- Note: user_behavior_logs engagement columns already defined in 004_verification_system.sql
 
 -- User Reports Table
 CREATE TABLE IF NOT EXISTS user_reports (
@@ -152,7 +134,7 @@ CREATE TABLE IF NOT EXISTS user_reports (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_reports_reported_user ON user_reports(reported_user_id);
+CREATE INDEX IF NOT EXISTS idx_reports_reported_user ON user_reports(reported_user_id);
 
 -- User Interactions Table
 CREATE TABLE IF NOT EXISTS user_interactions (
@@ -166,7 +148,7 @@ CREATE TABLE IF NOT EXISTS user_interactions (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_interactions_user ON user_interactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_interactions_user ON user_interactions(user_id);
 
 -- Conversation Analytics Table
 CREATE TABLE IF NOT EXISTS conversation_analytics (
@@ -182,21 +164,39 @@ CREATE TABLE IF NOT EXISTS conversation_analytics (
     UNIQUE(conversation_id, user_id)
 );
 
-CREATE INDEX idx_conv_analytics_user ON conversation_analytics(user_id);
+CREATE INDEX IF NOT EXISTS idx_conv_analytics_user ON conversation_analytics(user_id);
 
--- Enhanced Behavioral Score
+-- Behavioral score function (15% weight)
 CREATE OR REPLACE FUNCTION calculate_behavioral_score(p_user_id UUID)
 RETURNS FLOAT AS $$
 DECLARE
-    v_base_score FLOAT := 1.0;
+    v_base_score FLOAT := 0.5;  -- Start at 0.5, build up with account age
     v_response_rate FLOAT;
     v_report_count INTEGER;
     v_ghosting_count INTEGER;
+    v_account_age_days INTEGER := 0;
 BEGIN
+    -- Account age bonus
+    SELECT EXTRACT(DAY FROM NOW() - created_at)::INTEGER INTO v_account_age_days
+    FROM profiles WHERE user_id = p_user_id;
+
+    v_account_age_days := COALESCE(v_account_age_days, 0);
+
+    -- Build up score with account age
+    IF v_account_age_days >= 180 THEN
+        v_base_score := v_base_score + 0.30;  -- 6+ months: 0.80
+    ELSIF v_account_age_days >= 90 THEN
+        v_base_score := v_base_score + 0.20;  -- 3+ months: 0.70
+    ELSIF v_account_age_days >= 30 THEN
+        v_base_score := v_base_score + 0.10;  -- 1+ month: 0.60
+    ELSIF v_account_age_days >= 7 THEN
+        v_base_score := v_base_score + 0.05;  -- 1+ week: 0.55
+    END IF;
+
     -- Message response rate (>80% within 24h = +0.10)
     SELECT COALESCE(
         COUNT(*) FILTER (WHERE response_time_seconds < 86400)::FLOAT /
-        NULLIF(COUNT(*), 0), 0.5
+        NULLIF(COUNT(*), 0), 0.0
     ) INTO v_response_rate
     FROM user_interactions
     WHERE user_id = p_user_id AND interaction_type = 'message_sent'
@@ -219,11 +219,25 @@ BEGIN
         - (v_report_count * 0.10)
         - (v_ghosting_count * 0.05);
 
+    -- Apply penalties from behavior logs
+    v_base_score := v_base_score - COALESCE(
+        (SELECT SUM(
+            CASE risk_level
+                WHEN 'critical' THEN 0.25
+                WHEN 'high' THEN 0.15
+                WHEN 'medium' THEN 0.05
+                ELSE 0.01
+            END
+        ) FROM user_behavior_logs
+        WHERE user_id = p_user_id AND created_at > NOW() - INTERVAL '30 days'),
+        0.0
+    );
+
     RETURN LEAST(GREATEST(v_base_score, 0.0), 1.0);
 END;
 $$ LANGUAGE plpgsql;
 
--- Reputation Score
+-- Reputation score function (5% weight)
 CREATE OR REPLACE FUNCTION calculate_reputation_score(p_user_id UUID)
 RETURNS FLOAT AS $$
 DECLARE
@@ -262,10 +276,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- PART 5: FIX WEIGHTED MATCHING ALGORITHM (CRITICAL BUG FIX)
+-- PART 5: WEIGHTED MATCHING ALGORITHM
 -- ==========================================
 
--- Helper: Calculate weighted answer alignment (uses question base_weight and effectiveness_score)
+-- Helper: Calculate weighted answer alignment
 CREATE OR REPLACE FUNCTION calculate_weighted_answer_alignment(
     p_user_a UUID,
     p_user_b UUID
@@ -297,8 +311,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Hybrid Matching: embeddings (60%) + weighted answers (40%)
--- Trust score NOT included in match calculation (matching happens within same tier)
--- IMPORTANT: Only shows verified users (photo_verified = true)
 CREATE OR REPLACE FUNCTION find_matches(
     p_user_id UUID,
     p_limit INTEGER DEFAULT 10,
@@ -375,7 +387,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- PART 6: TRUST SCORE V2 CALCULATION (7 COMPONENTS)
+-- PART 6: TRUST SCORE CALCULATION (7 COMPONENTS)
 -- ==========================================
 
 CREATE OR REPLACE FUNCTION calculate_trust_score(p_user_id UUID)
@@ -385,13 +397,16 @@ AS $$
 DECLARE
     v_document_score FLOAT := 0.0;
     v_photo_score FLOAT := 0.0;
-    v_consistency_score FLOAT := 1.0;
-    v_behavioral_score FLOAT := 1.0;
+    v_consistency_score FLOAT := 0.3;  -- Start low, build up with answers
+    v_behavioral_score FLOAT := 0.5;   -- Start at base, build up with time
     v_social_score FLOAT := 0.0;
     v_completeness_score FLOAT := 0.0;
     v_reputation_score FLOAT := 1.0;
     v_total_score FLOAT := 0.0;
     v_trust_tier VARCHAR(20);
+    v_answer_count INTEGER := 0;
+    v_account_age_days INTEGER := 0;
+    v_unresolved_contradictions INTEGER := 0;
 BEGIN
     -- 1. Document (25%)
     SELECT COALESCE(AVG(match_score), 0.0) INTO v_document_score
@@ -400,11 +415,32 @@ BEGIN
     -- 2. Photo (20%) - REQUIRED but still contributes to score quality
     v_photo_score := calculate_photo_verification_score(p_user_id);
 
-    -- 3. Consistency (15%)
-    SELECT COALESCE(1.0 - AVG(contradiction_score), 1.0) INTO v_consistency_score
+    -- 3. Consistency (15%) - Build up gradually with answers
+    SELECT COUNT(*) INTO v_answer_count
+    FROM user_answers WHERE user_id = p_user_id;
+
+    SELECT COUNT(*) INTO v_unresolved_contradictions
     FROM consistency_checks WHERE user_id = p_user_id AND NOT is_resolved;
 
-    -- 4. Behavioral (15%)
+    IF v_answer_count < 10 THEN
+        -- New users with < 10 answers: gradually increase from 0.3 to 0.6
+        v_consistency_score := 0.3 + (v_answer_count::FLOAT / 10.0) * 0.3;
+    ELSIF v_unresolved_contradictions = 0 THEN
+        -- Users with enough answers and no contradictions
+        IF v_answer_count >= 30 THEN
+            v_consistency_score := 1.0;
+        ELSIF v_answer_count >= 20 THEN
+            v_consistency_score := 0.9;
+        ELSE
+            v_consistency_score := 0.8;
+        END IF;
+    ELSE
+        -- Has contradictions - use old formula
+        SELECT COALESCE(1.0 - AVG(contradiction_score), 0.5) INTO v_consistency_score
+        FROM consistency_checks WHERE user_id = p_user_id AND NOT is_resolved;
+    END IF;
+
+    -- 4. Behavioral (15%) - Already handles account age in function
     v_behavioral_score := calculate_behavioral_score(p_user_id);
 
     -- 5. Social (10%)
@@ -417,7 +453,7 @@ BEGIN
         (CASE WHEN education_level IS NOT NULL THEN 0.05 ELSE 0 END) +
         (CASE WHEN employment_status IS NOT NULL THEN 0.05 ELSE 0 END) +
         (CASE WHEN annual_income_range IS NOT NULL THEN 0.05 ELSE 0 END) +
-        0.40 * LEAST((SELECT COUNT(*) FROM user_answers WHERE user_answers.user_id = p_user_id)::FLOAT / 44.0, 1.0) +
+        0.40 * LEAST((SELECT COUNT(*) FROM user_answers WHERE user_answers.user_id = p_user_id)::FLOAT / get_active_question_count()::FLOAT, 1.0) +
         0.10 * (CASE WHEN EXISTS(SELECT 1 FROM user_family_background WHERE user_family_background.user_id = p_user_id) THEN 1 ELSE 0 END)
     ) INTO v_completeness_score
     FROM profiles WHERE profiles.user_id = p_user_id;
@@ -473,15 +509,43 @@ BEGIN
         'completeness_score', v_completeness_score,
         'reputation_score', v_reputation_score,
         'total_score', v_total_score,
-        'trust_tier', v_trust_tier
+        'trust_tier', v_trust_tier,
+        'calculated_at', NOW()
     );
 END;
 $$;
 
 -- ==========================================
--- TRIGGERS: Auto-update photo_verified flag
+-- PART 7: TRIGGERS & SYNC
 -- ==========================================
 
+-- Sync trust tier to profile when trust score changes
+CREATE OR REPLACE FUNCTION sync_profile_trust_tier()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_new_tier TEXT;
+BEGIN
+  -- Calculate new tier from total_trust_score
+  v_new_tier := calculate_tier_from_score(NEW.total_trust_score);
+
+  -- Update profiles table
+  UPDATE profiles
+  SET trust_tier = v_new_tier,
+      tier_preferences = COALESCE(tier_preferences, get_default_tier_preferences(v_new_tier))
+  WHERE user_id = NEW.user_id;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_sync_profile_trust_tier ON user_trust_scores;
+CREATE TRIGGER trigger_sync_profile_trust_tier
+  AFTER INSERT OR UPDATE OF total_trust_score
+  ON user_trust_scores
+  FOR EACH ROW
+  EXECUTE FUNCTION sync_profile_trust_tier();
+
+-- Auto-update photo_verified flag when photo verification completes
 CREATE OR REPLACE FUNCTION update_profile_photo_verified()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -504,7 +568,18 @@ CREATE TRIGGER trigger_update_photo_verified
     FOR EACH ROW
     EXECUTE FUNCTION update_profile_photo_verified();
 
+-- ==========================================
+-- PART 8: BACKFILL & PERMISSIONS
+-- ==========================================
+
+-- Backfill tier_preferences for existing users
+UPDATE profiles
+SET tier_preferences = get_default_tier_preferences(COALESCE(trust_tier, 'pebble'))
+WHERE tier_preferences IS NULL;
+
 -- Grant permissions
+GRANT EXECUTE ON FUNCTION calculate_tier_from_score TO authenticated;
+GRANT EXECUTE ON FUNCTION get_default_tier_preferences TO authenticated;
 GRANT EXECUTE ON FUNCTION calculate_photo_verification_score TO authenticated;
 GRANT EXECUTE ON FUNCTION can_user_access_matches TO authenticated;
 GRANT EXECUTE ON FUNCTION calculate_social_verification_score TO authenticated;
@@ -519,6 +594,15 @@ GRANT SELECT, INSERT, UPDATE ON social_verifications TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON user_reports TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON user_interactions TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON conversation_analytics TO authenticated;
+
+-- ==========================================
+-- COMMENTS & DOCUMENTATION
+-- ==========================================
+
+COMMENT ON COLUMN profiles.tier_preferences IS 'Ocean Pearl Theme tiers user wants to match with: pebble(조약돌), shell(조개), pearl(진주), coral(산호), diamond(다이아)';
+COMMENT ON COLUMN profiles.trust_tier IS 'Current tier based on trust score: pebble(0-19%), shell(20-39%), pearl(40-59%), coral(60-79%), diamond(80-100%)';
+COMMENT ON FUNCTION get_default_tier_preferences IS 'Returns default tier preferences for a given trust tier. Lower tiers can only match with same or lower tiers.';
+COMMENT ON FUNCTION calculate_trust_score IS 'Calculates comprehensive trust score from 7 components: Document (25%), Photo (20%), Consistency (15%), Behavioral (15%), Social (10%), Completeness (10%), Reputation (5%)';
 
 -- ==========================================
 -- MIGRATION NOTES
@@ -542,20 +626,9 @@ GRANT SELECT, INSERT, UPDATE ON conversation_analytics TO authenticated;
 --    - Formula: embedding (60%) + weighted answers (40%)
 --    - Trust score NOT included in matching (users matched within same tier)
 --
--- TIER PROGRESSION:
---    Pebble → Shell:   Complete profile + answer all questions
---    Shell → Pearl:    + Photo verification + ID card
---    Pearl → Coral:    + Diploma + Income cert + LinkedIn
---    Coral → Diamond:  + Employment cert + Instagram + 90 days good behavior
---
--- NEXT STEPS:
---    1. Run this migration
---    2. Update mobile app:
---       - Add photo verification flow (required on signup/login)
---       - Block match access until photo verified
---       - Show 5-tier badges (diamond/coral/pearl/shell/pebble)
---    3. Monitor metrics:
---       - Photo verification completion rate (target: 95%+ in 7 days)
---       - Match quality improvement
---       - User trust perception
+-- 📊 TRUST SCORE DEFAULTS FOR NEW USERS:
+--    - Consistency: 0.3 (builds to 1.0 with 30+ answers)
+--    - Behavioral: 0.5 (builds to 0.8 with 6+ months account age)
+--    - Reputation: 1.0 (decreases with negative behavior)
+--    - New users start in Pebble tier and progress up
 -- ==========================================

@@ -1,13 +1,13 @@
 -- ==========================================
--- FLIO Daily Match Tracking
+-- FLIO Daily Match Tracking System
 -- ==========================================
--- This migration adds match view tracking for daily limits
--- based on trust tiers (Diamond/Coral/Pearl/Shell/Pebble)
+-- Description: Tracks daily match views for tier-based limits and history
+-- Consolidated from: 001_core_schema.sql (lines 382-680)
 -- ==========================================
 
--- ===================
--- 1. DAILY MATCH VIEW TRACKING TABLE
--- ===================
+-- ==========================================
+-- DAILY MATCH VIEWS TABLE
+-- ==========================================
 
 CREATE TABLE IF NOT EXISTS daily_match_views (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,19 +28,9 @@ CREATE TABLE IF NOT EXISTS daily_match_views (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_daily_match_views_user ON daily_match_views(user_id);
-CREATE INDEX IF NOT EXISTS idx_daily_match_views_date ON daily_match_views(view_date);
-CREATE INDEX IF NOT EXISTS idx_daily_match_views_user_date ON daily_match_views(user_id, view_date);
-CREATE INDEX IF NOT EXISTS idx_daily_match_views_timestamp ON daily_match_views(view_timestamp);
-
--- Unique constraint: one user can't view the same match multiple times per day
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_daily_match
-    ON daily_match_views(user_id, match_user_id, view_date);
-
--- ===================
--- 2. MATCH HISTORY TABLE (Long-term tracking)
--- ===================
+-- ==========================================
+-- MATCH HISTORY TABLE
+-- ==========================================
 
 CREATE TABLE IF NOT EXISTS match_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -68,7 +58,21 @@ CREATE TABLE IF NOT EXISTS match_history (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes
+-- ==========================================
+-- INDEXES
+-- ==========================================
+
+-- Indexes for daily_match_views
+CREATE INDEX IF NOT EXISTS idx_daily_match_views_user ON daily_match_views(user_id);
+CREATE INDEX IF NOT EXISTS idx_daily_match_views_date ON daily_match_views(view_date);
+CREATE INDEX IF NOT EXISTS idx_daily_match_views_user_date ON daily_match_views(user_id, view_date);
+CREATE INDEX IF NOT EXISTS idx_daily_match_views_timestamp ON daily_match_views(view_timestamp);
+
+-- Unique constraint: one user can't view the same match multiple times per day
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_daily_match
+    ON daily_match_views(user_id, match_user_id, view_date);
+
+-- Indexes for match_history
 CREATE INDEX IF NOT EXISTS idx_match_history_user ON match_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_match_history_match_user ON match_history(match_user_id);
 CREATE INDEX IF NOT EXISTS idx_match_history_action ON match_history(last_action);
@@ -78,11 +82,35 @@ CREATE INDEX IF NOT EXISTS idx_match_history_score ON match_history(final_score)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_match_pair
     ON match_history(user_id, match_user_id);
 
--- ===================
--- 3. DATABASE FUNCTIONS
--- ===================
+-- ==========================================
+-- ROW LEVEL SECURITY
+-- ==========================================
 
--- Function to get daily match count for a user
+ALTER TABLE daily_match_views ENABLE ROW LEVEL SECURITY;
+ALTER TABLE match_history ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+CREATE POLICY "Users can view own match views"
+    ON daily_match_views FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Service can insert match views"
+    ON daily_match_views FOR INSERT
+    WITH CHECK (true);
+
+CREATE POLICY "Users can view own match history"
+    ON match_history FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Service can manage match history"
+    ON match_history FOR ALL
+    USING (true);
+
+-- ==========================================
+-- DAILY MATCH FUNCTIONS
+-- ==========================================
+
+-- Get daily match count
 CREATE OR REPLACE FUNCTION get_daily_match_count(p_user_id UUID, p_date DATE DEFAULT CURRENT_DATE)
 RETURNS INTEGER AS $$
 DECLARE
@@ -98,7 +126,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to check if user can view more matches today
+-- Check if user can view more matches
 CREATE OR REPLACE FUNCTION can_view_more_matches(p_user_id UUID)
 RETURNS JSONB AS $$
 DECLARE
@@ -146,7 +174,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to log match view
+-- Log match view
 CREATE OR REPLACE FUNCTION log_match_view(
     p_user_id UUID,
     p_match_user_id UUID,
@@ -189,7 +217,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to get match view statistics
+-- Get match view statistics
 CREATE OR REPLACE FUNCTION get_match_view_stats(p_user_id UUID, p_days INTEGER DEFAULT 7)
 RETURNS JSONB AS $$
 DECLARE
@@ -234,60 +262,35 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- ===================
--- 4. ROW LEVEL SECURITY
--- ===================
-
--- Enable RLS on new tables
-ALTER TABLE daily_match_views ENABLE ROW LEVEL SECURITY;
-ALTER TABLE match_history ENABLE ROW LEVEL SECURITY;
-
--- Users can view their own match views
-CREATE POLICY "Users can view own match views"
-    ON daily_match_views FOR SELECT
-    USING (auth.uid() = user_id);
-
--- Users can insert their own match views (system inserts via service role)
-CREATE POLICY "Service can insert match views"
-    ON daily_match_views FOR INSERT
-    WITH CHECK (true);  -- Service role handles this
-
--- Users can view their own match history
-CREATE POLICY "Users can view own match history"
-    ON match_history FOR SELECT
-    USING (auth.uid() = user_id);
-
--- Service can manage match history
-CREATE POLICY "Service can manage match history"
-    ON match_history FOR ALL
-    USING (true);
-
--- ===================
--- 5. AUTOMATIC CLEANUP (Optional)
--- ===================
-
--- Function to clean up old daily match views (keep last 30 days)
+-- Cleanup old match views (keep last 30 days)
 CREATE OR REPLACE FUNCTION cleanup_old_match_views()
 RETURNS INTEGER AS $$
 DECLARE
     v_deleted_count INTEGER;
 BEGIN
     DELETE FROM daily_match_views
-    WHERE view_date < CURRENT_DATE - INTERVAL '30 days'
-    RETURNING COUNT(*) INTO v_deleted_count;
+    WHERE view_date < CURRENT_DATE - INTERVAL '30 days';
 
+    GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
     RETURN v_deleted_count;
 END;
 $$ LANGUAGE plpgsql;
 
--- Comment: You can schedule this function to run daily via pg_cron or external scheduler
--- Example: SELECT cleanup_old_match_views();
+-- ==========================================
+-- GRANT PERMISSIONS
+-- ==========================================
 
--- ===================
--- 6. HELPFUL VIEWS
--- ===================
+GRANT EXECUTE ON FUNCTION get_daily_match_count TO authenticated;
+GRANT EXECUTE ON FUNCTION can_view_more_matches TO authenticated;
+GRANT EXECUTE ON FUNCTION log_match_view TO authenticated;
+GRANT EXECUTE ON FUNCTION get_match_view_stats TO authenticated;
+GRANT EXECUTE ON FUNCTION cleanup_old_match_views TO service_role;
 
--- View: Current day match counts by trust tier
+-- ==========================================
+-- HELPFUL VIEWS
+-- ==========================================
+
+-- Current day match counts by trust tier
 CREATE OR REPLACE VIEW v_daily_match_counts_by_tier AS
 SELECT
     p.trust_tier,
@@ -308,16 +311,9 @@ ORDER BY
         ELSE 6
     END;
 
--- ===================
--- MIGRATION COMPLETE
--- ===================
+-- ==========================================
+-- COMMENTS
+-- ==========================================
 
--- Verify migration
-DO $$
-BEGIN
-    RAISE NOTICE 'Migration 008 completed successfully';
-    RAISE NOTICE 'Created tables: daily_match_views, match_history';
-    RAISE NOTICE 'Created functions: get_daily_match_count, can_view_more_matches, log_match_view, get_match_view_stats';
-    RAISE NOTICE 'Created view: v_daily_match_counts_by_tier';
-    RAISE NOTICE 'Daily match limits (Ocean Pearl Theme): Diamond=30, Coral=20, Pearl=15, Shell=10, Pebble=5';
-END $$;
+COMMENT ON TABLE daily_match_views IS 'Tracks daily match views for tier-based limits (Diamond=30, Coral=20, Pearl=15, Shell=10, Pebble=5)';
+COMMENT ON TABLE match_history IS 'Long-term match history and user actions';

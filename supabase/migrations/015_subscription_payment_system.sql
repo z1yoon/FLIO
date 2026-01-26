@@ -2,6 +2,7 @@
 -- FLIO Subscription & Payment System
 -- ==========================================
 -- Description: Hybrid tier system with trust score eligibility + payment requirement
+-- Consolidated from: 006_subscription_payment_system.sql (entire file)
 -- Date: 2026-01-23
 --
 -- HYBRID SYSTEM:
@@ -17,30 +18,14 @@
 -- - Diamond (다이아): ₩59,900 (80-100% trust score required)
 -- ==========================================
 
--- ==========================================
--- PART 1: ADD PAID_TIER TO PROFILES
--- ==========================================
-
--- Add paid_tier column (separate from trust_tier)
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS paid_tier VARCHAR(20) DEFAULT 'pebble';
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS paid_tier_expires_at TIMESTAMPTZ;
-
--- Add subscription tracking
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(20) DEFAULT 'none';
--- none, active, expired, cancelled, trial
-
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subscription_started_at TIMESTAMPTZ;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subscription_renewed_at TIMESTAMPTZ;
-
--- Update existing users to pebble paid tier
-UPDATE profiles SET paid_tier = 'pebble' WHERE paid_tier IS NULL;
+-- Note: paid_tier, subscription_status, and related columns already defined in 002_core_tables.sql
 
 -- Add index for subscription queries
 CREATE INDEX IF NOT EXISTS idx_profiles_paid_tier ON profiles(paid_tier);
 CREATE INDEX IF NOT EXISTS idx_profiles_subscription_status ON profiles(subscription_status);
 
 -- ==========================================
--- PART 2: SUBSCRIPTION PLANS TABLE
+-- SUBSCRIPTION PLANS TABLE
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS subscription_plans (
@@ -73,7 +58,7 @@ ON CONFLICT (tier_name) DO UPDATE SET
     updated_at = NOW();
 
 -- ==========================================
--- PART 3: USER SUBSCRIPTIONS TABLE
+-- USER SUBSCRIPTIONS TABLE
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS user_subscriptions (
@@ -115,7 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_user_subscriptions_status ON user_subscriptions(s
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_expires_at ON user_subscriptions(expires_at);
 
 -- ==========================================
--- PART 4: PAYMENT TRANSACTIONS TABLE
+-- PAYMENT TRANSACTIONS TABLE
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS payment_transactions (
@@ -161,7 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_payment_transactions_status ON payment_transactio
 CREATE INDEX IF NOT EXISTS idx_payment_transactions_gateway_id ON payment_transactions(gateway_transaction_id);
 
 -- ==========================================
--- PART 5: FUNCTIONS FOR TIER ELIGIBILITY
+-- FUNCTIONS FOR TIER ELIGIBILITY
 -- ==========================================
 
 -- Check if user is eligible to purchase a tier
@@ -228,7 +213,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- PART 6: FUNCTION TO PURCHASE SUBSCRIPTION
+-- FUNCTION TO PURCHASE SUBSCRIPTION
 -- ==========================================
 
 CREATE OR REPLACE FUNCTION purchase_subscription(
@@ -329,7 +314,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- PART 7: FUNCTION TO CHECK ACTIVE SUBSCRIPTION
+-- FUNCTION TO CHECK ACTIVE SUBSCRIPTION
 -- ==========================================
 
 CREATE OR REPLACE FUNCTION get_active_subscription(p_user_id UUID)
@@ -380,137 +365,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- PART 8: UPDATE TRUST SCORE FUNCTION
--- ==========================================
--- Modify calculate_trust_score to NOT auto-upgrade paid_tier
-
-CREATE OR REPLACE FUNCTION calculate_trust_score(p_user_id UUID)
-RETURNS JSONB
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_document_score FLOAT := 0.0;
-    v_photo_score FLOAT := 0.0;
-    v_consistency_score FLOAT := 0.3;
-    v_behavioral_score FLOAT := 0.5;
-    v_social_score FLOAT := 0.0;
-    v_completeness_score FLOAT := 0.0;
-    v_reputation_score FLOAT := 1.0;
-    v_total_score FLOAT := 0.0;
-    v_trust_tier VARCHAR(20);
-    v_answer_count INTEGER := 0;
-    v_account_age_days INTEGER := 0;
-    v_unresolved_contradictions INTEGER := 0;
-BEGIN
-    -- [Same calculation logic as before...]
-    -- 1. Document (25%)
-    SELECT COALESCE(AVG(match_score), 0.0) INTO v_document_score
-    FROM user_documents WHERE user_id = p_user_id AND verification_status = 'verified';
-
-    -- 2. Photo (20%)
-    v_photo_score := calculate_photo_verification_score(p_user_id);
-
-    -- 3. Consistency (15%)
-    SELECT COUNT(*) INTO v_answer_count FROM user_answers WHERE user_id = p_user_id;
-    SELECT COUNT(*) INTO v_unresolved_contradictions FROM consistency_checks WHERE user_id = p_user_id AND NOT is_resolved;
-
-    IF v_answer_count < 10 THEN
-        v_consistency_score := 0.3 + (v_answer_count::FLOAT / 10.0) * 0.3;
-    ELSIF v_unresolved_contradictions = 0 THEN
-        IF v_answer_count >= 30 THEN v_consistency_score := 1.0;
-        ELSIF v_answer_count >= 20 THEN v_consistency_score := 0.9;
-        ELSE v_consistency_score := 0.8;
-        END IF;
-    ELSE
-        SELECT COALESCE(1.0 - AVG(contradiction_score), 0.5) INTO v_consistency_score
-        FROM consistency_checks WHERE user_id = p_user_id AND NOT is_resolved;
-    END IF;
-
-    -- 4. Behavioral (15%)
-    SELECT EXTRACT(DAY FROM NOW() - created_at)::INTEGER INTO v_account_age_days FROM profiles WHERE user_id = p_user_id;
-    v_account_age_days := COALESCE(v_account_age_days, 0);
-
-    v_behavioral_score := 0.5;
-    IF v_account_age_days >= 180 THEN v_behavioral_score := v_behavioral_score + 0.30;
-    ELSIF v_account_age_days >= 90 THEN v_behavioral_score := v_behavioral_score + 0.20;
-    ELSIF v_account_age_days >= 30 THEN v_behavioral_score := v_behavioral_score + 0.10;
-    ELSIF v_account_age_days >= 7 THEN v_behavioral_score := v_behavioral_score + 0.05;
-    END IF;
-
-    v_behavioral_score := v_behavioral_score - COALESCE(
-        (SELECT SUM(CASE risk_level WHEN 'critical' THEN 0.25 WHEN 'high' THEN 0.15 WHEN 'medium' THEN 0.05 ELSE 0.01 END)
-         FROM user_behavior_logs WHERE user_id = p_user_id AND created_at > NOW() - INTERVAL '30 days'),
-        0.0
-    );
-    v_behavioral_score := LEAST(GREATEST(v_behavioral_score, 0.0), 1.0);
-
-    -- 5. Social (10%)
-    v_social_score := calculate_social_verification_score(p_user_id);
-
-    -- 6. Completeness (10%)
-    SELECT (
-        (CASE WHEN real_name IS NOT NULL THEN 0.05 ELSE 0 END) +
-        (CASE WHEN height_cm IS NOT NULL THEN 0.03 ELSE 0 END) +
-        (CASE WHEN education_level IS NOT NULL THEN 0.05 ELSE 0 END) +
-        (CASE WHEN employment_status IS NOT NULL THEN 0.05 ELSE 0 END) +
-        (CASE WHEN annual_income_range IS NOT NULL THEN 0.05 ELSE 0 END) +
-        0.40 * LEAST((SELECT COUNT(*) FROM user_answers WHERE user_answers.user_id = p_user_id)::FLOAT / 44.0, 1.0) +
-        0.10 * (CASE WHEN EXISTS(SELECT 1 FROM user_family_background WHERE user_family_background.user_id = p_user_id) THEN 1 ELSE 0 END)
-    ) INTO v_completeness_score FROM profiles WHERE profiles.user_id = p_user_id;
-    v_completeness_score := COALESCE(v_completeness_score, 0.0);
-
-    -- 7. Reputation (5%)
-    v_reputation_score := calculate_reputation_score(p_user_id);
-
-    -- Calculate total
-    v_total_score := (v_document_score * 0.25) + (v_photo_score * 0.20) + (v_consistency_score * 0.15) +
-                     (v_behavioral_score * 0.15) + (v_social_score * 0.10) + (v_completeness_score * 0.10) +
-                     (v_reputation_score * 0.05);
-    v_total_score := LEAST(GREATEST(v_total_score, 0.0), 1.0);
-    v_trust_tier := calculate_tier_from_score(v_total_score);
-
-    -- Upsert trust score
-    INSERT INTO user_trust_scores (user_id, document_score, consistency_score, behavioral_score, completeness_score,
-                                    total_trust_score, trust_tier, last_calculated_at, updated_at)
-    VALUES (p_user_id, v_document_score, v_consistency_score, v_behavioral_score, v_completeness_score,
-            v_total_score, v_trust_tier, NOW(), NOW())
-    ON CONFLICT (user_id) DO UPDATE SET
-        document_score = EXCLUDED.document_score,
-        consistency_score = EXCLUDED.consistency_score,
-        behavioral_score = EXCLUDED.behavioral_score,
-        completeness_score = EXCLUDED.completeness_score,
-        total_trust_score = EXCLUDED.total_trust_score,
-        trust_tier = EXCLUDED.trust_tier,
-        last_calculated_at = NOW(),
-        updated_at = NOW();
-
-    -- IMPORTANT: Update trust_tier (eligibility) but NOT paid_tier!
-    -- paid_tier only changes through purchase_subscription()
-    UPDATE profiles
-    SET trust_tier = v_trust_tier,
-        tier_preferences = COALESCE(tier_preferences, get_default_tier_preferences(v_trust_tier)),
-        -- Do NOT update paid_tier here!
-        updated_at = NOW()
-    WHERE profiles.user_id = p_user_id;
-
-    RETURN jsonb_build_object(
-        'version', '1.0',
-        'document_score', v_document_score,
-        'photo_score', v_photo_score,
-        'consistency_score', v_consistency_score,
-        'behavioral_score', v_behavioral_score,
-        'social_score', v_social_score,
-        'completeness_score', v_completeness_score,
-        'reputation_score', v_reputation_score,
-        'total_score', v_total_score,
-        'trust_tier', v_trust_tier,
-        'calculated_at', NOW()
-    );
-END;
-$$;
-
--- ==========================================
--- PART 9: GRANT PERMISSIONS
+-- GRANT PERMISSIONS
 -- ==========================================
 
 GRANT SELECT ON subscription_plans TO authenticated;
@@ -532,7 +387,6 @@ GRANT EXECUTE ON FUNCTION get_active_subscription TO authenticated;
 -- 5. Added check_tier_eligibility() function
 -- 6. Added purchase_subscription() function
 -- 7. Added get_active_subscription() function
--- 8. Updated calculate_trust_score() to NOT auto-upgrade paid_tier
 --
 -- Next steps:
 -- 1. Implement payment gateway integration (Toss, KakaoPay)

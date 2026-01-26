@@ -120,11 +120,43 @@ class TrustScoreService:
     # Required documents for full verification
     DOCUMENT_TYPES = ['id_card', 'diploma', 'income_cert', 'employment_cert']
 
-    # Total questions count
-    TOTAL_QUESTIONS = 44
+    # Dynamic question count (cached for 5 minutes)
+    _question_count_cache = None
+    _cache_time = None
+    CACHE_DURATION = 300  # 5 minutes
 
     def __init__(self):
         self.supabase = get_supabase_client()
+
+    def get_total_questions(self) -> int:
+        """Get total question count from database (cached for 5 minutes)"""
+        from datetime import datetime, timedelta
+
+        now = datetime.now()
+
+        # Return cached value if still valid
+        if (TrustScoreService._question_count_cache is not None and
+            TrustScoreService._cache_time is not None and
+            now - TrustScoreService._cache_time < timedelta(seconds=self.CACHE_DURATION)):
+            return TrustScoreService._question_count_cache
+
+        # Fetch from database
+        result = self.supabase.table('system_settings').select('value').eq(
+            'key', 'active_question_count'
+        ).execute()
+
+        if result.data and len(result.data) > 0:
+            count = result.data[0]['value']['count']
+            TrustScoreService._question_count_cache = count
+            TrustScoreService._cache_time = now
+            return count
+
+        # Fallback: count directly from questions table
+        result = self.supabase.table('questions').select('id', count='exact').execute()
+        count = result.count if result.count else 40
+        TrustScoreService._question_count_cache = count
+        TrustScoreService._cache_time = now
+        return count
 
     async def calculate_trust_score(self, user_id: str) -> TrustScoreResponse:
         """
@@ -132,7 +164,7 @@ class TrustScoreService:
         Uses database RPC function for atomic calculation
 
         Returns:
-            TrustScoreResponse with all component scores and tier
+            TrustScoreResponse with all 7 component scores and tier
 
         Raises:
             Exception if calculation fails - no fallback logic
@@ -150,9 +182,12 @@ class TrustScoreService:
         return TrustScoreResponse(
             user_id=user_id,
             document_score=data['document_score'],
+            photo_score=data.get('photo_score', 0.0),
             consistency_score=data['consistency_score'],
             behavioral_score=data['behavioral_score'],
+            social_score=data.get('social_score', 0.0),
             completeness_score=data['completeness_score'],
+            reputation_score=data.get('reputation_score', 1.0),
             total_trust_score=data['total_score'],
             trust_tier=data['trust_tier'],
             calculation_details=data,
@@ -420,7 +455,8 @@ class TrustScoreService:
         ).eq('user_id', user_id).execute()
 
         if answers_result.count:
-            questions_score = min(answers_result.count / self.TOTAL_QUESTIONS, 1.0)
+            total_questions = self.get_total_questions()
+            questions_score = min(answers_result.count / total_questions, 1.0)
             score += questions_score * 0.40
 
         # 3. Family background (15%)
@@ -623,15 +659,24 @@ class TrustScoreService:
             return None
 
         data = result.data
+
+        # Calculate photo, social, and reputation scores on the fly (not stored in table)
+        photo_score = await self._calculate_photo_score(user_id)
+        social_score = await self._calculate_social_score(user_id)
+        reputation_score = await self._calculate_reputation_score(user_id)
+
         return TrustScoreResponse(
             user_id=user_id,
             document_score=data['document_score'],
+            photo_score=photo_score,
             consistency_score=data['consistency_score'],
             behavioral_score=data['behavioral_score'],
+            social_score=social_score,
             completeness_score=data['completeness_score'],
+            reputation_score=reputation_score,
             total_trust_score=data['total_trust_score'],
             trust_tier=data['trust_tier'],
-            calculation_details=data['calculation_details'],
+            calculation_details=data.get('calculation_details', {}),
             last_calculated_at=datetime.fromisoformat(
                 data['last_calculated_at'].replace('Z', '+00:00')
             )

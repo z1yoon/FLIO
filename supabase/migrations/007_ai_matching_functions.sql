@@ -1,9 +1,11 @@
--- FLIO AI Backend Functions
--- Essential functions only - user_answers dependent functions moved to 006
+-- ==========================================
+-- FLIO AI Matching Functions
+-- ==========================================
+-- Description: AI-powered matching functions using vector embeddings
+-- Consolidated from: 001_core_schema.sql (lines 278-381)
+-- ==========================================
 
--- ==========================================
 -- Find Similar Profiles (1024D Embeddings)
--- ==========================================
 DROP FUNCTION IF EXISTS find_similar_profiles(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER);
 
 CREATE FUNCTION find_similar_profiles(
@@ -24,7 +26,7 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         p.user_id,
         (1 - (p.profile_embedding <=> query_embedding))::FLOAT AS similarity,
         p.nickname,
@@ -43,9 +45,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- ==========================================
 -- Store Profile Embedding
--- ==========================================
 DROP FUNCTION IF EXISTS store_profile_embedding(UUID, vector, TEXT);
 
 CREATE FUNCTION store_profile_embedding(
@@ -56,18 +56,16 @@ CREATE FUNCTION store_profile_embedding(
 RETURNS BOOLEAN AS $$
 BEGIN
     UPDATE public.profiles
-    SET 
+    SET
         profile_embedding = p_embedding,
         updated_at = NOW()
     WHERE user_id = p_user_id;
-    
+
     RETURN FOUND;
 END;
 $$ LANGUAGE plpgsql;
 
--- ==========================================
 -- Get User Profile Summary
--- ==========================================
 DROP FUNCTION IF EXISTS get_user_profile_summary(UUID);
 
 CREATE FUNCTION get_user_profile_summary(p_user_id UUID)
@@ -82,7 +80,7 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         p.user_id,
         p.nickname,
         DATE_PART('year', AGE(p.birth_date))::INTEGER as age,
@@ -96,8 +94,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================
--- Grant Permissions
+-- GRANT PERMISSIONS
 -- ==========================================
+
 GRANT EXECUTE ON FUNCTION find_similar_profiles(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION store_profile_embedding(UUID, vector, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_user_profile_summary(UUID) TO authenticated;
@@ -105,14 +104,3 @@ GRANT EXECUTE ON FUNCTION get_user_profile_summary(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION find_similar_profiles(vector, UUID, INTEGER, VARCHAR, INTEGER, INTEGER) TO service_role;
 GRANT EXECUTE ON FUNCTION store_profile_embedding(UUID, vector, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION get_user_profile_summary(UUID) TO service_role;
-
--- ==========================================
--- Indexes
--- ==========================================
-CREATE INDEX IF NOT EXISTS idx_profiles_has_embedding 
-ON public.profiles(user_id) WHERE profile_embedding IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_questions_active_effectiveness 
-ON public.questions(is_active, effectiveness_score DESC) WHERE is_active = TRUE;
-
-CREATE INDEX IF NOT EXISTS idx_questions_answer_type ON questions(answer_type);
