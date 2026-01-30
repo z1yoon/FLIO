@@ -21,10 +21,10 @@ CREATE TABLE IF NOT EXISTS reshuffle_feedback (
 
     -- Matching context
     previous_match_count INTEGER,
-    new_match_count INTEGER,
-
-    INDEX idx_reshuffle_user ON reshuffle_feedback(user_id, created_at DESC)
+    new_match_count INTEGER
 );
+
+CREATE INDEX IF NOT EXISTS idx_reshuffle_user ON reshuffle_feedback(user_id, created_at DESC);
 
 -- ==========================================
 -- Preference Analysis Cache Table
@@ -35,11 +35,11 @@ CREATE TABLE IF NOT EXISTS preference_analysis_cache (
     analysis_data JSONB NOT NULL,
     usage_count INTEGER DEFAULT 1,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-
-    INDEX idx_preference_text ON preference_analysis_cache(preference_text),
-    INDEX idx_usage_count ON preference_analysis_cache(usage_count DESC, created_at DESC)
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_preference_text ON preference_analysis_cache(preference_text);
+CREATE INDEX IF NOT EXISTS idx_usage_count ON preference_analysis_cache(usage_count DESC, created_at DESC);
 
 -- ==========================================
 -- Functions: Reshuffle Context
