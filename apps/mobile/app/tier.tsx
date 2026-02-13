@@ -29,7 +29,7 @@ interface TierPlan {
   gradientColors: readonly [string, string, ...string[]];
 }
 
-const TIER_PLANS: TierPlan[] = [
+const getTierPlans = (questionCount: number): TierPlan[] => [
   {
     tier: 'pebble',
     name: '조약돌',
@@ -39,7 +39,7 @@ const TIER_PLANS: TierPlan[] = [
     scoreRange: '0-19% 신뢰도',
     features: [
       '기본 프로필 작성',
-      '44개 질문 답변',
+      `${questionCount}개 질문 답변`,
       '하루 5명 프로필 보기',
       '기본 매칭 알고리즘',
       '문서 인증 없음',
@@ -121,6 +121,7 @@ const TIER_PLANS: TierPlan[] = [
 export default function TierScreen() {
   const [trustScore, setTrustScore] = useState(0);
   const [currentTier, setCurrentTier] = useState<'pebble' | 'shell' | 'pearl' | 'coral'>('pebble');
+  const [questionCount, setQuestionCount] = useState(40); // Default to 40
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -149,7 +150,24 @@ export default function TierScreen() {
       }
     };
 
+    const fetchQuestionCount = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('questions')
+          .select('*', { count: 'exact', head: true });
+
+        if (error) {
+          console.error('❌ Failed to fetch question count:', error);
+        } else if (count !== null) {
+          setQuestionCount(count);
+        }
+      } catch (error) {
+        console.error('❌ Failed to fetch question count:', error);
+      }
+    };
+
     fetchUserInfo();
+    fetchQuestionCount();
   }, []);
 
   const goBack = () => {
@@ -289,7 +307,7 @@ export default function TierScreen() {
 
         {/* Tier Plans */}
         <Text style={styles.sectionTitle}>모든 등급</Text>
-        {TIER_PLANS.map(renderTierCard)}
+        {getTierPlans(questionCount).map(renderTierCard)}
 
         {/* Info Section */}
         <View style={styles.infoSection}>

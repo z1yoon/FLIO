@@ -146,10 +146,10 @@ class ProfileEmbeddingService:
         Find compatible matches for a user using the database matching function.
 
         Uses database function find_matches() which implements:
-        - Hybrid algorithm: embeddings (60%) + weighted answers (40%)
+        - Hybrid algorithm: 60% static questions + 20% importance + 20% embeddings
         - Tier filtering (users match within same/lower tiers)
-        - Photo verification requirement
-        - Dealbreaker filtering
+        - Photo verification requirement (REQUIRED)
+        - Dealbreaker enforcement (hard filtering on Q001-Q004)
 
         Ocean Pearl Theme Tiers: 조약돌 → 조개 → 진주 → 산호 → 다이아
         """
@@ -398,8 +398,13 @@ class ProfileEmbeddingService:
     async def _calculate_compatibility(self, user_a_id: str, user_b_id: str) -> Dict[str, float]:
         """
         Calculate detailed compatibility score between two users
-        Hybrid algorithm: Static questions (70%) + Importance bonus (20%) + Azure embeddings (10%)
-        Prioritizes concrete question matches over semantic similarity
+
+        Hybrid Algorithm (Prioritizes Concrete Over AI):
+        - 60% Static Question Matching (concrete answer alignment)
+        - 20% Importance/Dealbreaker Bonus (user-defined weights)
+        - 20% Azure OpenAI Embedding Similarity (semantic understanding)
+
+        This approach is more reliable than pure AI matching.
         """
         try:
             # 1. Get embeddings for both users (Azure OpenAI similarity)

@@ -62,7 +62,7 @@ export interface Profile {
   daily_match_limit: number; // Default: 5
 
   // Subscription
-  subscription_status: 'none' | 'active' | 'expired' | 'cancelled' | 'trial';
+  subscription_status: 'none' | 'active' | 'expired' | 'cancelled' | 'suspended';
   subscription_started_at?: string;
   subscription_renewed_at?: string;
 

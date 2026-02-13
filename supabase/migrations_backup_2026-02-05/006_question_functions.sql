@@ -34,18 +34,10 @@ CREATE TRIGGER trigger_update_question_count
     FOR EACH STATEMENT EXECUTE FUNCTION update_question_count();
 
 -- Update user_answers timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_timestamp()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
 CREATE TRIGGER user_answers_updated_at
     BEFORE UPDATE ON user_answers
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_timestamp();
+    EXECUTE FUNCTION update_updated_at();
 
 -- ==========================================
 -- ROW LEVEL SECURITY

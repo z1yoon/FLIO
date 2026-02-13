@@ -1,11 +1,28 @@
 -- ==========================================
--- FLIO Questions & User Answers
+-- FLIO Questions and Answers System
 -- ==========================================
--- Consolidates: 003_questions_database + 005_user_answers_table
--- 40 research-based questions + user answers storage
+-- Description: Complete questions and answers system with 40 research-based questions
+-- Migration: 002_questions_and_answers.sql
+-- Created: 2026-02-05
+--
+-- Includes:
+-- - 4 dealbreaker questions (exact match filtering)
+-- - 2 marriage planning questions (weighted scoring)
+-- - 6 Gottman Four Horsemen questions (conflict resolution)
+-- - 5 attachment and emotional support questions
+-- - 5 Korean family culture questions
+-- - 7 lifestyle and values questions
+-- - 3 additional important questions
+-- - 3 lifestyle basics questions
+-- - 5 open-ended text questions (for semantic AI matching)
+--
+-- Tables: questions, user_answers, user_feedback, system_settings
 -- ==========================================
 
--- Drop old tables
+-- ==========================================
+-- DROP EXISTING TABLES
+-- ==========================================
+
 DROP TABLE IF EXISTS question_performance CASCADE;
 DROP TABLE IF EXISTS user_answers CASCADE;
 DROP TABLE IF EXISTS user_feedback CASCADE;
@@ -13,17 +30,24 @@ DROP TABLE IF EXISTS questions CASCADE;
 DROP TABLE IF EXISTS system_settings CASCADE;
 
 -- ==========================================
--- QUESTIONS TABLE
+-- TABLE: questions
 -- ==========================================
+-- Research-based questions for compatibility matching
+-- 35 choice questions + 5 text questions = 40 total
 
 CREATE TABLE questions (
     id VARCHAR(100) PRIMARY KEY,
-    category VARCHAR(50) NOT NULL,
+    category VARCHAR(50) NOT NULL CHECK (category IN (
+        '기본정보', '가치관', '결혼계획', '갈등해결', '애착',
+        '감정지원', '가족', '소통', '애정표현', '재정',
+        '커리어', '가사', '종교', '라이프스타일', '주거',
+        '음주', '흡연', '연애관', '성장'
+    )),
     text_ko TEXT NOT NULL,
     text_en TEXT NOT NULL,
-    answer_type VARCHAR(50) NOT NULL,
+    answer_type VARCHAR(50) NOT NULL CHECK (answer_type IN ('choice', 'text')),
     options JSONB NOT NULL,
-    base_weight FLOAT DEFAULT 0.5,
+    base_weight FLOAT DEFAULT 0.5 CHECK (base_weight >= 0 AND base_weight <= 1),
     effectiveness_score FLOAT DEFAULT 5.0,
     can_be_dealbreaker BOOLEAN DEFAULT false,
     tags TEXT[],
@@ -33,13 +57,24 @@ CREATE TABLE questions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_questions_category ON questions(category);
-CREATE INDEX idx_questions_weight ON questions(base_weight DESC);
-CREATE INDEX idx_questions_answer_type ON questions(answer_type);
+COMMENT ON TABLE questions IS '40 research-based questions (35 choice + 5 text) for matching compatibility';
+COMMENT ON COLUMN questions.id IS 'Unique question identifier (snake_case)';
+COMMENT ON COLUMN questions.category IS 'Question category in Korean';
+COMMENT ON COLUMN questions.text_ko IS 'Question text in Korean';
+COMMENT ON COLUMN questions.text_en IS 'Question text in English';
+COMMENT ON COLUMN questions.answer_type IS 'Type of answer: choice or text';
+COMMENT ON COLUMN questions.options IS 'JSON array of answer options for choice questions';
+COMMENT ON COLUMN questions.base_weight IS 'Base importance weight (0-1) for matching algorithm';
+COMMENT ON COLUMN questions.effectiveness_score IS 'Research-based effectiveness score (1-10)';
+COMMENT ON COLUMN questions.can_be_dealbreaker IS 'True = exact match filtering, False = weighted scoring';
+COMMENT ON COLUMN questions.tags IS 'Optional tags for categorization';
+COMMENT ON COLUMN questions.placeholder IS 'Placeholder text for text input questions';
+COMMENT ON COLUMN questions.max_length IS 'Maximum character length for text questions';
 
 -- ==========================================
--- USER ANSWERS TABLE
+-- TABLE: user_answers
 -- ==========================================
+-- User responses to questions with importance ratings
 
 CREATE TABLE user_answers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -47,8 +82,8 @@ CREATE TABLE user_answers (
     question_id VARCHAR(100) NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
 
     -- Answer data
-    answer_value VARCHAR(100),  -- For choice questions
-    answer_text TEXT,           -- For text questions
+    answer_value VARCHAR(100),
+    answer_text TEXT,
     importance INTEGER DEFAULT 3 CHECK (importance >= 1 AND importance <= 5),
     is_dealbreaker BOOLEAN DEFAULT false,
 
@@ -56,34 +91,48 @@ CREATE TABLE user_answers (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
-    -- One answer per question per user
-    UNIQUE(user_id, question_id)
+    -- Constraints
+    UNIQUE(user_id, question_id),
+    CHECK (
+        (answer_value IS NOT NULL AND answer_text IS NULL) OR
+        (answer_value IS NULL AND answer_text IS NOT NULL)
+    )
 );
 
-CREATE INDEX idx_user_answers_user_id ON user_answers(user_id);
-CREATE INDEX idx_user_answers_question_id ON user_answers(question_id);
-CREATE INDEX idx_user_answers_dealbreaker ON user_answers(is_dealbreaker) WHERE is_dealbreaker = true;
+COMMENT ON TABLE user_answers IS 'User responses to questions with importance ratings';
+COMMENT ON COLUMN user_answers.answer_value IS 'Selected option value for choice questions';
+COMMENT ON COLUMN user_answers.answer_text IS 'Free text answer for text questions';
+COMMENT ON COLUMN user_answers.importance IS 'User-defined importance (1-5) for weighted matching';
+COMMENT ON COLUMN user_answers.is_dealbreaker IS 'User override: mark this question as dealbreaker for matching';
 
 -- ==========================================
--- USER FEEDBACK TABLE
+-- TABLE: user_feedback
 -- ==========================================
+-- General app feedback from users
 
 CREATE TABLE user_feedback (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
 
-    feedback_type VARCHAR(50) NOT NULL,
+    feedback_type VARCHAR(50) NOT NULL CHECK (feedback_type IN (
+        'bug_report', 'feature_request', 'question_quality',
+        'match_quality', 'general', 'complaint'
+    )),
     content TEXT NOT NULL,
     rating INTEGER CHECK (rating >= 1 AND rating <= 5),
 
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_user_feedback_user_id ON user_feedback(user_id);
+COMMENT ON TABLE user_feedback IS 'General app feedback from users';
+COMMENT ON COLUMN user_feedback.feedback_type IS 'Type of feedback: bug_report, feature_request, etc.';
+COMMENT ON COLUMN user_feedback.content IS 'Feedback content';
+COMMENT ON COLUMN user_feedback.rating IS 'Optional rating (1-5)';
 
 -- ==========================================
--- SYSTEM SETTINGS TABLE
+-- TABLE: system_settings
 -- ==========================================
+-- System-wide settings stored as key-value pairs
 
 CREATE TABLE system_settings (
     key TEXT PRIMARY KEY,
@@ -91,103 +140,30 @@ CREATE TABLE system_settings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ==========================================
--- FUNCTIONS
--- ==========================================
-
--- Get active question count
-CREATE OR REPLACE FUNCTION get_active_question_count()
-RETURNS INTEGER AS $$
-BEGIN
-    RETURN (SELECT COUNT(*) FROM questions);
-END;
-$$ LANGUAGE plpgsql STABLE;
-
--- Update question count trigger
-CREATE OR REPLACE FUNCTION update_question_count()
-RETURNS TRIGGER AS $$
-BEGIN
-    INSERT INTO system_settings (key, value, updated_at)
-    VALUES ('active_question_count', jsonb_build_object('count', (SELECT COUNT(*) FROM questions)), NOW())
-    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trigger_update_question_count ON questions;
-CREATE TRIGGER trigger_update_question_count
-    AFTER INSERT OR DELETE ON questions
-    FOR EACH STATEMENT EXECUTE FUNCTION update_question_count();
-
--- Update user_answers timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_timestamp()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER user_answers_updated_at
-    BEFORE UPDATE ON user_answers
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_timestamp();
+COMMENT ON TABLE system_settings IS 'System-wide settings stored as key-value pairs';
+COMMENT ON COLUMN system_settings.key IS 'Setting key identifier';
+COMMENT ON COLUMN system_settings.value IS 'Setting value as JSONB';
 
 -- ==========================================
--- ROW LEVEL SECURITY
+-- INDEXES
 -- ==========================================
 
-ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_answers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_feedback ENABLE ROW LEVEL SECURITY;
-ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+-- Questions table indexes
+CREATE INDEX idx_questions_category ON questions(category);
+CREATE INDEX idx_questions_weight ON questions(base_weight DESC);
+CREATE INDEX idx_questions_answer_type ON questions(answer_type);
 
--- Questions (public read)
-CREATE POLICY "Questions are viewable by all"
-ON questions FOR SELECT
-TO authenticated
-USING (true);
+-- User answers table indexes
+CREATE INDEX idx_user_answers_user_id ON user_answers(user_id);
+CREATE INDEX idx_user_answers_question_id ON user_answers(question_id);
+CREATE INDEX idx_user_answers_dealbreaker ON user_answers(is_dealbreaker) WHERE is_dealbreaker = true;
 
--- User answers (private)
-CREATE POLICY "Users can view own answers"
-ON user_answers FOR SELECT
-TO authenticated
-USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own answers"
-ON user_answers FOR INSERT
-TO authenticated
-WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own answers"
-ON user_answers FOR UPDATE
-TO authenticated
-USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own answers"
-ON user_answers FOR DELETE
-TO authenticated
-USING (auth.uid() = user_id);
-
--- User feedback
-CREATE POLICY "Users can view own feedback"
-ON user_feedback FOR SELECT
-TO authenticated
-USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own feedback"
-ON user_feedback FOR INSERT
-TO authenticated
-WITH CHECK (auth.uid() = user_id);
-
--- System settings (public read)
-CREATE POLICY "System settings are viewable by all"
-ON system_settings FOR SELECT
-TO authenticated
-USING (true);
+-- User feedback table indexes
+CREATE INDEX idx_user_feedback_user_id ON user_feedback(user_id);
+CREATE INDEX idx_user_feedback_type ON user_feedback(feedback_type);
 
 -- ==========================================
--- 40 QUESTIONS DATA
+-- QUESTIONS DATA (40 total)
 -- ==========================================
 
 INSERT INTO questions (id, category, text_ko, text_en, answer_type, options, base_weight, can_be_dealbreaker) VALUES
@@ -388,12 +364,165 @@ INSERT INTO questions (id, category, text_ko, text_en, answer_type, options, bas
 'What was the most challenging moment in your life, how did you overcome it, and how did it shape who you are today?', 'text', '[]'::jsonb, 0.95, false);
 
 -- ==========================================
--- INITIALIZE SYSTEM SETTINGS
+-- SYSTEM SETTINGS INITIALIZATION
 -- ==========================================
 
-INSERT INTO system_settings (key, value)
-VALUES ('active_question_count', jsonb_build_object('count', 40))
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+INSERT INTO system_settings (key, value, updated_at)
+VALUES ('active_question_count', jsonb_build_object('count', 40), NOW())
+ON CONFLICT (key) DO UPDATE SET
+    value = EXCLUDED.value,
+    updated_at = NOW();
+
+-- ==========================================
+-- FUNCTIONS
+-- ==========================================
+
+-- Function: Get active question count
+CREATE OR REPLACE FUNCTION get_active_question_count()
+RETURNS INTEGER
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN (SELECT COUNT(*) FROM questions);
+END;
+$$;
+
+COMMENT ON FUNCTION get_active_question_count() IS 'Returns the total number of active questions in the system';
+
+-- Function: Update question count in system settings
+CREATE OR REPLACE FUNCTION update_question_count()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    INSERT INTO system_settings (key, value, updated_at)
+    VALUES (
+        'active_question_count',
+        jsonb_build_object('count', (SELECT COUNT(*) FROM questions)),
+        NOW()
+    )
+    ON CONFLICT (key) DO UPDATE SET
+        value = EXCLUDED.value,
+        updated_at = NOW();
+    RETURN NULL;
+END;
+$$;
+
+COMMENT ON FUNCTION update_question_count() IS 'Trigger function to update question count in system_settings';
+
+-- ==========================================
+-- TRIGGERS
+-- ==========================================
+
+-- Trigger: Update question count when questions table changes
+DROP TRIGGER IF EXISTS trigger_update_question_count ON questions;
+CREATE TRIGGER trigger_update_question_count
+    AFTER INSERT OR DELETE ON questions
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION update_question_count();
+
+COMMENT ON TRIGGER trigger_update_question_count ON questions IS 'Updates active_question_count in system_settings when questions are added or removed';
+
+-- Trigger: Update updated_at on user_answers
+CREATE TRIGGER user_answers_updated_at
+    BEFORE UPDATE ON user_answers
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+COMMENT ON TRIGGER user_answers_updated_at ON user_answers IS 'Automatically updates updated_at timestamp when user_answers are modified';
+
+-- Trigger: Update updated_at on questions
+CREATE TRIGGER questions_updated_at
+    BEFORE UPDATE ON questions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+COMMENT ON TRIGGER questions_updated_at ON questions IS 'Automatically updates updated_at timestamp when questions are modified';
+
+-- ==========================================
+-- ROW LEVEL SECURITY (RLS)
+-- ==========================================
+
+-- Enable RLS on all tables
+ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies: questions table
+DROP POLICY IF EXISTS "Questions are viewable by all" ON questions;
+CREATE POLICY "Questions are viewable by all"
+    ON questions
+    FOR SELECT
+    TO authenticated
+    USING (true);
+
+COMMENT ON POLICY "Questions are viewable by all" ON questions IS 'All authenticated users can view questions';
+
+-- RLS Policies: user_answers table
+DROP POLICY IF EXISTS "Users can view own answers" ON user_answers;
+CREATE POLICY "Users can view own answers"
+    ON user_answers
+    FOR SELECT
+    TO authenticated
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own answers" ON user_answers;
+CREATE POLICY "Users can insert own answers"
+    ON user_answers
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own answers" ON user_answers;
+CREATE POLICY "Users can update own answers"
+    ON user_answers
+    FOR UPDATE
+    TO authenticated
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own answers" ON user_answers;
+CREATE POLICY "Users can delete own answers"
+    ON user_answers
+    FOR DELETE
+    TO authenticated
+    USING (auth.uid() = user_id);
+
+COMMENT ON POLICY "Users can view own answers" ON user_answers IS 'Users can only view their own answers';
+COMMENT ON POLICY "Users can insert own answers" ON user_answers IS 'Users can only insert their own answers';
+COMMENT ON POLICY "Users can update own answers" ON user_answers IS 'Users can only update their own answers';
+COMMENT ON POLICY "Users can delete own answers" ON user_answers IS 'Users can only delete their own answers';
+
+-- RLS Policies: user_feedback table
+DROP POLICY IF EXISTS "Users can view own feedback" ON user_feedback;
+CREATE POLICY "Users can view own feedback"
+    ON user_feedback
+    FOR SELECT
+    TO authenticated
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own feedback" ON user_feedback;
+CREATE POLICY "Users can insert own feedback"
+    ON user_feedback
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (auth.uid() = user_id);
+
+COMMENT ON POLICY "Users can view own feedback" ON user_feedback IS 'Users can only view their own feedback';
+COMMENT ON POLICY "Users can insert own feedback" ON user_feedback IS 'Users can only insert their own feedback';
+
+-- RLS Policies: system_settings table
+DROP POLICY IF EXISTS "System settings are viewable by all" ON system_settings;
+CREATE POLICY "System settings are viewable by all"
+    ON system_settings
+    FOR SELECT
+    TO authenticated
+    USING (true);
+
+COMMENT ON POLICY "System settings are viewable by all" ON system_settings IS 'All authenticated users can view system settings';
 
 -- ==========================================
 -- GRANT PERMISSIONS
@@ -402,15 +531,6 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 GRANT SELECT ON questions TO authenticated;
 GRANT SELECT ON system_settings TO authenticated;
 GRANT EXECUTE ON FUNCTION get_active_question_count TO authenticated;
-
--- ==========================================
--- COMMENTS
--- ==========================================
-
-COMMENT ON TABLE questions IS '40 research-based questions (35 choice + 5 text) for matching compatibility';
-COMMENT ON TABLE user_answers IS 'User responses to questions with importance ratings';
-COMMENT ON TABLE user_feedback IS 'General app feedback from users';
-COMMENT ON COLUMN questions.can_be_dealbreaker IS 'True = exact match filtering, False = weighted scoring';
 
 -- ==========================================
 -- VERIFICATION
@@ -445,4 +565,20 @@ BEGIN
     RAISE NOTICE 'Lifestyle Basics: 3 (location, drinking, smoking)';
     RAISE NOTICE 'Open-ended Text: 5 (semantic AI matching)';
     RAISE NOTICE '==========================================';
+
+    IF v_total != 40 THEN
+        RAISE EXCEPTION 'Question count mismatch: expected 40, got %', v_total;
+    END IF;
+
+    IF v_choice != 35 THEN
+        RAISE EXCEPTION 'Choice question count mismatch: expected 35, got %', v_choice;
+    END IF;
+
+    IF v_text != 5 THEN
+        RAISE EXCEPTION 'Text question count mismatch: expected 5, got %', v_text;
+    END IF;
+
+    IF v_dealbreakers != 4 THEN
+        RAISE EXCEPTION 'Dealbreaker count mismatch: expected 4, got %', v_dealbreakers;
+    END IF;
 END $$;

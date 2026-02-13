@@ -199,7 +199,7 @@ async def health_check():
                 "supabase": supabase_health
             },
             "features": [
-                "✅ Korean compatibility questions (44 questions)",
+                "✅ Korean compatibility questions (40 questions)",
                 "✅ Azure OpenAI text analysis",
                 "✅ Profile embedding generation",
                 "✅ Similarity-based matching",

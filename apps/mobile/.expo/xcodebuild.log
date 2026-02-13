@@ -1446,26 +1446,6 @@ PhaseScriptExecution [CP-User]\ [Hermes]\ Replace\ Hermes\ for\ the\ right\ conf
 Node found at: /opt/homebrew/Cellar/node/24.2.0/bin/node
 No previous build detected, but Debug Configuration. No need to replace Hermes engine
 
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/RCT-Folly/RCT-Folly_privacy.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/RCT-Folly/ResourceBundle-RCT-Folly_privacy-RCT-Folly-Info.plist (in target 'RCT-Folly-RCT-Folly_privacy' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/RCT-Folly/ResourceBundle-RCT-Folly_privacy-RCT-Folly-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/RCT-Folly/RCT-Folly_privacy.bundle/Info.plist
-
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/boost/boost_privacy.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/boost/ResourceBundle-boost_privacy-boost-Info.plist (in target 'boost-boost_privacy' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/boost/ResourceBundle-boost_privacy-boost-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/boost/boost_privacy.bundle/Info.plist
-
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/glog/glog_privacy.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/glog/ResourceBundle-glog_privacy-glog-Info.plist (in target 'glog-glog_privacy' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/glog/ResourceBundle-glog_privacy-glog-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/glog/glog_privacy.bundle/Info.plist
-
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/React-Core/React-Core_privacy.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/React-Core/ResourceBundle-React-Core_privacy-React-Core-Info.plist (in target 'React-Core-React-Core_privacy' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/React-Core/ResourceBundle-React-Core_privacy-React-Core-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/React-Core/React-Core_privacy.bundle/Info.plist
-
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/React-cxxreact/React-cxxreact_privacy.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/React-cxxreact/ResourceBundle-React-cxxreact_privacy-React-cxxreact-Info.plist (in target 'React-cxxreact-React-cxxreact_privacy' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/React-cxxreact/ResourceBundle-React-cxxreact_privacy-React-cxxreact-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/React-cxxreact/React-cxxreact_privacy.bundle/Info.plist
-
 warning: Run script build phase '[CP-User] [RN]Check rncore' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'React-Fabric' from project 'Pods')
 PhaseScriptExecution [CP-User]\ [RN]Check\ rncore /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/React-Fabric.build/Script-46EB2E00025F80.sh (in target 'React-Fabric' from project 'Pods')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
@@ -2539,14 +2519,6 @@ PhaseScriptExecution [CP-User]\ [RN]Check\ rncore /Users/amber/Library/Developer
     /bin/sh -c /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/React-FabricComponents.build/Script-46EB2E00025F90.sh
 Checking whether Codegen has run...
 
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/EXConstants/EXConstants.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/EXConstants/ResourceBundle-EXConstants-EXConstants-Info.plist (in target 'EXConstants-EXConstants' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/EXConstants/ResourceBundle-EXConstants-EXConstants-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/EXConstants/EXConstants.bundle/Info.plist
-
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/EXConstants/ExpoConstants_privacy.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/EXConstants/ResourceBundle-ExpoConstants_privacy-EXConstants-Info.plist (in target 'EXConstants-ExpoConstants_privacy' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/EXConstants/ResourceBundle-ExpoConstants_privacy-EXConstants-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/EXConstants/ExpoConstants_privacy.bundle/Info.plist
-
 note: Run script build phase '[CP-User] Generate app.config for prebuilt Constants.manifest' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'EXConstants' from project 'Pods')
 PhaseScriptExecution [CP-User]\ Generate\ app.config\ for\ prebuilt\ Constants.manifest /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/EXConstants.build/Script-46EB2E00025F70.sh (in target 'EXConstants' from project 'Pods')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
@@ -3085,20 +3057,6 @@ PhaseScriptExecution [CP-User]\ Generate\ app.config\ for\ prebuilt\ Constants.m
     export variant\=normal
     /bin/sh -c /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/EXConstants.build/Script-46EB2E00025F70.sh
 Node found at: /opt/homebrew/Cellar/node/24.2.0/bin/node
-
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/ExpoFileSystem/ExpoFileSystem_privacy.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/ExpoFileSystem/ResourceBundle-ExpoFileSystem_privacy-ExpoFileSystem-Info.plist (in target 'ExpoFileSystem-ExpoFileSystem_privacy' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/ExpoFileSystem/ResourceBundle-ExpoFileSystem_privacy-ExpoFileSystem-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/ExpoFileSystem/ExpoFileSystem_privacy.bundle/Info.plist
-
-/Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Pods.xcodeproj: warning: The iOS Simulator deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 9.0, but the range of supported deployment target versions is 12.0 to 26.2.99. (in target 'SDWebImage-SDWebImage' from project 'Pods')
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/SDWebImage/SDWebImage.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/SDWebImage/ResourceBundle-SDWebImage-SDWebImage-Info.plist (in target 'SDWebImage-SDWebImage' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/SDWebImage/ResourceBundle-SDWebImage-SDWebImage-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/SDWebImage/SDWebImage.bundle/Info.plist
-
-/Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Pods.xcodeproj: warning: The iOS Simulator deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 9.0, but the range of supported deployment target versions is 12.0 to 26.2.99. (in target 'RNCAsyncStorage-RNCAsyncStorage_resources' from project 'Pods')
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/RNCAsyncStorage/RNCAsyncStorage_resources.bundle/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/RNCAsyncStorage/ResourceBundle-RNCAsyncStorage_resources-RNCAsyncStorage-Info.plist (in target 'RNCAsyncStorage-RNCAsyncStorage_resources' from project 'Pods')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/RNCAsyncStorage/ResourceBundle-RNCAsyncStorage_resources-RNCAsyncStorage-Info.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/RNCAsyncStorage/RNCAsyncStorage_resources.bundle/Info.plist
 
 note: Run script build phase 'Bundle React Native code and images' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'FLIO' from project 'FLIO')
 note: Run script build phase '[Expo] Configure project' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'FLIO' from project 'FLIO')
@@ -3706,14 +3664,15 @@ SwiftGeneratePch normal arm64 Compiling\ bridging\ header (in target 'FLIO' from
 
 SwiftDriverJobDiscovery normal arm64 Compiling bridging header (in target 'FLIO' from project 'FLIO')
 
-SwiftEmitModule normal arm64 Emitting\ module\ for\ FLIO (in target 'FLIO' from project 'FLIO')
+SwiftCompile normal arm64 Compiling\ ExpoModulesProvider.swift /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/Pods-FLIO/ExpoModulesProvider.swift (in target 'FLIO' from project 'FLIO')
 
-EmitSwiftModule normal arm64 (in target 'FLIO' from project 'FLIO')
+SwiftCompile normal arm64 /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/Pods-FLIO/ExpoModulesProvider.swift (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     
 
-SwiftCompile normal arm64 Compiling\ ExpoModulesProvider.swift /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/Pods-FLIO/ExpoModulesProvider.swift (in target 'FLIO' from project 'FLIO')
-SwiftCompile normal arm64 /Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Target\ Support\ Files/Pods-FLIO/ExpoModulesProvider.swift (in target 'FLIO' from project 'FLIO')
+SwiftEmitModule normal arm64 Emitting\ module\ for\ FLIO (in target 'FLIO' from project 'FLIO')
+
+EmitSwiftModule normal arm64 (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     
 
@@ -4356,18 +4315,14 @@ PhaseScriptExecution [CP]\ Copy\ Pods\ Resources /Users/amber/Library/Developer/
 Transfer starting: 27 files
 EXConstants.bundle/app.config
 
-sent 2790 bytes  received 42 bytes  690731 bytes/sec
+sent 2790 bytes  received 42 bytes  913548 bytes/sec
 total size is 12618  speedup is 4.46
 
 ExtractAppIntentsMetadata (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name FLIO --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk --xcode-version 17C52 --platform-family iOS --deployment-target 15.1 --bundle-identifier app.flio.mobile --output /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app --target-triple arm64-apple-ios15.1-simulator --binary-file /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app/FLIO --dependency-file /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Objects-normal/arm64/FLIO_dependency_info.dat --stringsdata-file /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Objects-normal/arm64/FLIO.SwiftFileList --metadata-file-list /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/FLIO.DependencyMetadataFileList --static-metadata-file-list /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/FLIO.DependencyStaticMetadataFileList --swift-const-vals-list /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/Objects-normal/arm64/FLIO.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
-2026-01-26 16:05:35.690 appintentsmetadataprocessor[77007:44969890] Starting appintentsmetadataprocessor export
-2026-01-26 16:05:35.704 appintentsmetadataprocessor[77007:44969890] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
-
-ProcessInfoPlistFile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app/Info.plist /Users/amber/gitlab/FLIO/apps/mobile/ios/FLIO/Info.plist (in target 'FLIO' from project 'FLIO')
-    cd /Users/amber/gitlab/FLIO/apps/mobile/ios
-    builtin-infoPlistUtility /Users/amber/gitlab/FLIO/apps/mobile/ios/FLIO/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/SplashScreen-SBPartialInfo.plist -additionalcontentfile /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Intermediates.noindex/FLIO.build/Debug-iphonesimulator/FLIO.build/assetcatalog_generated_info.plist -o /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app/Info.plist
+2026-02-05 20:57:35.235 appintentsmetadataprocessor[39048:73704116] Starting appintentsmetadataprocessor export
+2026-02-05 20:57:35.249 appintentsmetadataprocessor[39048:73704116] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
 
 CodeSign /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app/FLIO.debug.dylib (in target 'FLIO' from project 'FLIO')
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
@@ -4397,6 +4352,8 @@ Validate /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctc
     cd /Users/amber/gitlab/FLIO/apps/mobile/ios
     builtin-validationUtility /Users/amber/Library/Developer/Xcode/DerivedData/FLIO-esrnuesrzuzvvwctcbtvvdudimoc/Build/Products/Debug-iphonesimulator/FLIO.app -shallow-bundle -infoplist-subpath Info.plist
 
+/Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Pods.xcodeproj: warning: The iOS Simulator deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 9.0, but the range of supported deployment target versions is 12.0 to 26.2.99. (in target 'RNCAsyncStorage-RNCAsyncStorage_resources' from project 'Pods')
+/Users/amber/gitlab/FLIO/apps/mobile/ios/Pods/Pods.xcodeproj: warning: The iOS Simulator deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 9.0, but the range of supported deployment target versions is 12.0 to 26.2.99. (in target 'SDWebImage-SDWebImage' from project 'Pods')
 warning: Run script build phase '[CP-User] [Hermes] Replace Hermes for the right configuration, if needed' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'hermes-engine' from project 'Pods')
 ** BUILD SUCCEEDED **
 

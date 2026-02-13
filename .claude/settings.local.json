@@ -75,7 +75,8 @@
       "Bash(supabase status:*)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__query-docs",
-      "Bash(for f in *.sql)"
+      "Bash(for f in *.sql)",
+      "Bash(supabase/verify-database.sh:*)"
     ],
     "deny": []
   },

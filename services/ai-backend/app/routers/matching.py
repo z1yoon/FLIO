@@ -210,13 +210,15 @@ async def find_matches(
             matches=matches_dict,
             total_found=len(filtered_matches),
             metadata={
-                "algorithm_version": "1.0",
+                "algorithm_version": "2.0",
                 "embedding_dimension": 1024,
-                "embedding_weight": 0.6,
-                "weighted_answers_weight": 0.4,
+                "static_questions_weight": 0.6,
+                "importance_bonus_weight": 0.2,
+                "embedding_similarity_weight": 0.2,
                 "dealbreaker_filtering": True,
                 "photo_verification_required": True,
-                "tier_filtering": True
+                "tier_filtering": True,
+                "algorithm_description": "60% static + 20% importance + 20% embeddings"
             }
         )
         

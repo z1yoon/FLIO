@@ -23,7 +23,7 @@ export class TrustScoreService {
    */
   async getTrustScore(userId: string): Promise<TrustScoreDetail | null> {
     try {
-      const response = await fetch(`${AI_BACKEND_URL}/trust/score/${userId}`);
+      const response = await fetch(`${AI_BACKEND_URL}/api/v1/trust/score/${userId}`);
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -44,7 +44,7 @@ export class TrustScoreService {
    */
   async getTrustSummary(userId: string): Promise<TrustSummary> {
     try {
-      const response = await fetch(`${AI_BACKEND_URL}/trust/summary/${userId}`);
+      const response = await fetch(`${AI_BACKEND_URL}/api/v1/trust/summary/${userId}`);
 
       if (!response.ok) {
         throw new Error(`Failed to get trust summary: ${response.statusText}`);
@@ -69,7 +69,7 @@ export class TrustScoreService {
     new_tier: TrustTier;
   }> {
     try {
-      const response = await fetch(`${AI_BACKEND_URL}/trust/recalculate/${userId}`, {
+      const response = await fetch(`${AI_BACKEND_URL}/api/v1/trust/recalculate/${userId}`, {
         method: 'POST',
       });
 
@@ -89,7 +89,7 @@ export class TrustScoreService {
    */
   async getUpgradePath(userId: string): Promise<UpgradePath> {
     try {
-      const response = await fetch(`${AI_BACKEND_URL}/trust/upgrade-path/${userId}`);
+      const response = await fetch(`${AI_BACKEND_URL}/api/v1/trust/upgrade-path/${userId}`);
 
       if (!response.ok) {
         throw new Error(`Failed to get upgrade path: ${response.statusText}`);
@@ -207,7 +207,7 @@ export class TrustScoreService {
     newValue?: string
   ): Promise<void> {
     try {
-      const response = await fetch(`${AI_BACKEND_URL}/trust/behavior/log`, {
+      const response = await fetch(`${AI_BACKEND_URL}/api/v1/trust/behavior/log`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -236,7 +236,7 @@ export class TrustScoreService {
    */
   async getAllTierInfo() {
     try {
-      const response = await fetch(`${AI_BACKEND_URL}/trust/tiers/info`);
+      const response = await fetch(`${AI_BACKEND_URL}/api/v1/trust/tiers/info`);
 
       if (!response.ok) {
         throw new Error(`Failed to get tier info: ${response.statusText}`);

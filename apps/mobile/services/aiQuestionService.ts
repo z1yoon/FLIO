@@ -520,7 +520,7 @@ class AIQuestionService {
       } catch (statsError) {
         console.error('Failed to fetch question stats:', statsError);
       }
-      return { answered: 0, total: 44, percentage: 0 }; // Updated default to 44
+      return { answered: 0, total: 40, percentage: 0 }; // Fallback default if stats unavailable
     } catch (error) {
       console.error('Failed to get user progress:', error);
       // Fallback: try to get total from stats endpoint
@@ -533,7 +533,7 @@ class AIQuestionService {
       } catch (statsError) {
         console.error('Failed to fetch question stats:', statsError);
       }
-      return { answered: 0, total: 44, percentage: 0 }; // Updated default to 44
+      return { answered: 0, total: 40, percentage: 0 }; // Fallback default if stats unavailable
     }
   }
 
@@ -559,7 +559,7 @@ class AIQuestionService {
     console.log('📤 Uploading document for verification:', documentType);
 
     try {
-      const response = await fetch(`${this.baseUrl}/verification/document/upload`, {
+      const response = await fetch(`${this.baseUrl}/verification/document/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -567,7 +567,8 @@ class AIQuestionService {
         body: JSON.stringify({
           user_id: userId,
           document_type: documentType,
-          file_url: fileUrl,
+          image_url: fileUrl,
+          claimed_data: {}, // Backend requires this; populate with actual claimed data when available
         }),
       });
 

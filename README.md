@@ -31,7 +31,7 @@ npx expo start
 | 🔗 **Social Verification** | 10% | Link LinkedIn, Instagram, KakaoTalk, Naver |
 | ✅ **Consistency** | 15% | No contradictions in profile/answers |
 | 💬 **Behavioral** | 15% | High response rate, good conversation quality |
-| 📝 **Completeness** | 10% | Fill profile + answer all 44 questions |
+| 📝 **Completeness** | 10% | Fill profile + answer all questions |
 | ⭐ **Reputation** | 5% | No reports, no ghosting, positive outcomes |
 
 **Total Score = Weighted sum of all 7 components**
@@ -50,7 +50,7 @@ npx expo start
 
 | From → To | Requirements |
 |-----------|-------------|
-| Pebble → Shell | Complete profile + All 44 questions answered |
+| Pebble → Shell | Complete profile + Answer all questions |
 | Shell → Pearl | **+ Photo verification (REQUIRED)** + ID card |
 | Pearl → Coral | + Diploma + Income cert + LinkedIn |
 | Coral → Diamond | + Employment cert + Instagram + 90 days good behavior |
@@ -77,36 +77,44 @@ npx expo start
 
 ## Matching Algorithm
 
-### Formula
+### Hybrid Formula (Prioritizes Concrete Over AI)
 ```
-Match Score = (Embedding × 60%) + (Weighted Answers × 40%)
+Match Score = (Static Questions × 60%) + (Importance Bonus × 20%) + (Embeddings × 20%)
 ```
 
 ### Components
 
-**1. Embedding Similarity (60%)**
-- AI semantic understanding using Azure OpenAI
-- Captures overall vibe and values
-- 1024D vector embeddings
+**1. Static Question Matching (60%)** - PRIORITIZED
+- Direct answer alignment on concrete questions
+- Exact matching for multiple choice
+- Semantic similarity for open-ended text
+- Most reliable compatibility signal
 
-**2. Weighted Answer Alignment (40%)** ← **BUG FIX**
+**2. Importance/Dealbreaker Bonus (20%)**
+- User-defined importance ratings (1-5 scale)
+- Dealbreaker enforcement (gender, age, divorce, disability)
+- Critical preferences weighted higher
 ```
 Question Weight = base_weight × (1 + importance/5) × (effectiveness/10)
 
 Example:
 "Want children?" → Weight 2.0 (high importance)
 "Like pets?"     → Weight 0.4 (low importance)
-
-Final = Σ(weight × alignment) / Σ(weight)
 ```
 
-**Note:** Trust score NOT included in matching (users already matched within same/similar tiers)
+**3. Azure OpenAI Embedding Similarity (20%)**
+- Semantic understanding of profile text
+- Captures overall vibe and values
+- 1024D vector embeddings (text-embedding-3-large)
+- Useful for nuanced compatibility
 
-**Result:** Important questions (marriage, kids) weighted higher than trivial ones (pets, food)
+**Note:** Trust score NOT included in matching (users pre-filtered by tier)
+
+**Result:** Concrete answers matter most, AI provides semantic layer
 
 ---
 
-## 44 Research-Based Questions
+## Research-Based Questions (Dynamic Count)
 
 **Categories:**
 - **Dealbreakers (4):** Gender, age, divorce, disability - 100% match required

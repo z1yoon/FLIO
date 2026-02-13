@@ -159,7 +159,7 @@ export interface VerificationStatus {
 }
 
 export interface SocialVerification {
-  platform: 'linkedin' | 'instagram' | 'kakao' | 'naver';
+  platform: 'instagram' | 'facebook' | 'linkedin' | 'kakao' | 'twitter';
   is_verified: boolean;
   verified_at?: string;
   account_age_days?: number;
@@ -180,7 +180,7 @@ export interface PhotoVerification {
 export interface DocumentVerification {
   id: string;
   user_id: string;
-  document_type: 'id_card' | 'diploma' | 'income_cert' | 'employment_cert';
+  document_type: 'id_card' | 'diploma' | 'employment_cert' | 'income_proof' | 'business_license';
   verification_status: 'pending' | 'verified' | 'flagged' | 'rejected';
   match_score?: number;
   verified_at?: string;
@@ -192,7 +192,7 @@ export interface DocumentVerification {
 
 export interface SubscriptionStatus {
   paid_tier: TrustTier;
-  subscription_status: 'none' | 'active' | 'expired' | 'cancelled' | 'trial';
+  subscription_status: 'none' | 'active' | 'expired' | 'cancelled' | 'suspended';
   subscription_started_at?: string;
   subscription_renewed_at?: string;
   paid_tier_expires_at?: string;

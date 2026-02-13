@@ -558,7 +558,7 @@ class SupabaseQuestionService {
       // Parse options from JSONB
       let options: string[] | undefined;
       if (q.options && Array.isArray(q.options)) {
-        options = q.options.map((option: any) => option.text_ko || option.value);
+        options = q.options.map((option: any) => option.label_ko || option.value);
       }
 
       return {

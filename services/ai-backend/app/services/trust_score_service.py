@@ -235,11 +235,11 @@ class TrustScoreService:
         # Determine tier
         trust_tier = self._determine_tier(total_score)
 
-        # Store results (only 4 main scores stored in table, matching database schema)
+        # Store results (all 7 components)
         await self._store_trust_score(
-            user_id, doc_score, consistency_score,
-            behavioral_score, completeness_score,
-            total_score, trust_tier
+            user_id, doc_score, photo_score, consistency_score,
+            behavioral_score, social_score, completeness_score,
+            reputation_score, total_score, trust_tier
         )
 
         return TrustScoreResponse(
@@ -617,24 +617,31 @@ class TrustScoreService:
         self,
         user_id: str,
         doc_score: float,
+        photo_score: float,
         consistency_score: float,
         behavioral_score: float,
+        social_score: float,
         completeness_score: float,
+        reputation_score: float,
         total_score: float,
         trust_tier: str
     ):
         """
         Store calculated trust score in database
 
-        Matches database schema: only stores 4 main scores (document, consistency, behavioral, completeness)
-        Photo, social, and reputation scores are calculated but not persisted in table
+        UPDATED: Now stores all 7 components for consistency
+        - Document (25%), Photo (20%), Consistency (15%), Behavioral (15%)
+        - Social (10%), Completeness (10%), Reputation (5%)
         """
         self.supabase.table('user_trust_scores').upsert({
             'user_id': user_id,
             'document_score': doc_score,
+            'photo_score': photo_score,
             'consistency_score': consistency_score,
             'behavioral_score': behavioral_score,
+            'social_score': social_score,
             'completeness_score': completeness_score,
+            'reputation_score': reputation_score,
             'total_trust_score': total_score,
             'trust_tier': trust_tier,
             'last_calculated_at': datetime.now().isoformat()
@@ -649,7 +656,7 @@ class TrustScoreService:
         """
         Get existing trust score for a user
         Returns None if not calculated yet
-        Raises exception on database errors - no fallback
+        UPDATED: Now reads all 7 components from database (no on-the-fly calculation)
         """
         result = self.supabase.table('user_trust_scores').select(
             '*'
@@ -660,20 +667,15 @@ class TrustScoreService:
 
         data = result.data
 
-        # Calculate photo, social, and reputation scores on the fly (not stored in table)
-        photo_score = await self._calculate_photo_score(user_id)
-        social_score = await self._calculate_social_score(user_id)
-        reputation_score = await self._calculate_reputation_score(user_id)
-
         return TrustScoreResponse(
             user_id=user_id,
             document_score=data['document_score'],
-            photo_score=photo_score,
+            photo_score=data.get('photo_score', 0.0),
             consistency_score=data['consistency_score'],
             behavioral_score=data['behavioral_score'],
-            social_score=social_score,
+            social_score=data.get('social_score', 0.0),
             completeness_score=data['completeness_score'],
-            reputation_score=reputation_score,
+            reputation_score=data.get('reputation_score', 1.0),
             total_trust_score=data['total_trust_score'],
             trust_tier=data['trust_tier'],
             calculation_details=data.get('calculation_details', {}),
