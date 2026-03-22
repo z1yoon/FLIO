@@ -350,3 +350,6 @@ class TrustScoreService:
         except ValueError:
             tier_enum = TrustTier.PEBBLE
         return self.TIER_BENEFITS.get(tier_enum, self.TIER_BENEFITS[TrustTier.PEBBLE])
+
+
+trust_score_service = TrustScoreService()

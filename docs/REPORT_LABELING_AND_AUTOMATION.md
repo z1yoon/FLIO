@@ -17,19 +17,21 @@
 
 ---
 
-## 2. L2 표준 코드 예시 (초안 12개)
+## 2. L2 표준 코드 예시 (초안 11개)
+
+`document_fraud`와 `impersonation`은 **한 코드로 통합**: `identity_document_fraud`  
+(서류 위조·타인 명의 도용·연예인 사칭 등 “신원·서류가 거짓” 계열은 모두 여기.)
 
 | 코드 | 설명 | 흔한 L1 매핑 |
 |------|------|----------------|
-| `identity_photo_mismatch` | 프로필 사진·실물과 다름 | fake_profile, catfishing |
-| `document_fraud` | 서류 위조·타인 | fake_profile, scam |
+| `identity_photo_mismatch` | 프로필 사진·실물과 다름 (카푸어 등) | fake_profile, catfishing |
+| `identity_document_fraud` | 서류 위조·타인 명의·사칭(연예인 등) | fake_profile, scam, catfishing |
 | `financial_scam` | 금전 요구·투자 사기 | scam |
 | `harassment_message` | 욕설·협박·스토킹 | harassment |
 | `harassment_meet` | 만남 후 폭언·폭력 | harassment |
 | `ghosting_pattern` | 반복 유령·무응답 | ghosting |
 | `spam_promo` | 홍보·다른 앱 유도 | spam |
 | `inappropriate_media` | 사진·콘텐츠 부적절 | inappropriate_content |
-| `impersonation` | 타인 사칭 | fake_profile |
 | `other_verified` | 기타·확인됨 | other |
 | `false_report` | 신고 무효(신고자 과실) | (dismissed) |
 | `insufficient_evidence` | 증거 부족 | (dismissed) |
@@ -84,6 +86,19 @@ Phase 2에서 추가:
 | 라벨 | 관리자 `admin_label` + 확정/기각 | 관리자가 OCR 필드 수정 → ground truth |
 | 학습 | 텍스트 분류 / 소형 LLM | Document Intelligence 커스텀 모델 |
 | 검증 | Precision on hold-out | Field-level accuracy |
+
+---
+
+## 7. NLI 프로필 일관성 (자연어 모순 탐지)
+
+**엔드포인트:** `POST /api/v1/trust/consistency/run` — body `{ "user_id": "<uuid>" }`  
+- 내부에서 `NLIConsistencyService.check_user_consistency` 실행 → `consistency_checks` 저장 → `calculate_trust_score`로 NLI 패널티 반영.
+
+**자동 트리거 (백그라운드, 동일 로직):**
+- `POST /api/v1/questions/answer` — 60문항 답변 완료 시
+- `POST /api/v1/profiles/extended` — 확장 프로필 수정 시
+
+즉, 사업계획서의 “허위 프로필 자동 차단”은 **별도 마이크로서비스 URL이 아니라** 위 API + 백그라운드 작업으로 구현된다.
 
 ---
 

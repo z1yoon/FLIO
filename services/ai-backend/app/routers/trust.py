@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import logging
+import json
 
 from ..services.trust_score_service import trust_score_service, TrustScoreResponse, TrustSummary
 
@@ -164,6 +165,47 @@ async def get_trust_score(user_id: str):
 
     except Exception as e:
         logger.error(f"Failed to get trust score for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ConsistencyRunRequest(BaseModel):
+    """Trigger NLI profile consistency check (same job as after 60 answers / profile edit)."""
+    user_id: str
+
+
+@router.post("/consistency/run")
+async def run_nli_consistency_check(request: ConsistencyRunRequest):
+    """
+    AI 프로필 일관성 검증 (NLI): 프로필·답변 간 논리 모순 탐지 (Azure OpenAI).
+    결과는 `consistency_checks`에 저장되고, 신뢰도 점수(NLI 패널티·매칭 차단)가 재계산된다.
+    """
+    try:
+        from ..services.nli_consistency_service import nli_consistency_service
+
+        nli_result = await nli_consistency_service.check_user_consistency(request.user_id)
+        trust = await trust_score_service.calculate_trust_score(request.user_id)
+
+        nli_json = (
+            nli_result.model_dump_json()
+            if hasattr(nli_result, "model_dump_json")
+            else nli_result.json()
+        )
+        nli_payload = json.loads(nli_json)
+
+        return {
+            "success": True,
+            "nli": nli_payload,
+            "trust": {
+                "total_trust_score": trust.total_trust_score,
+                "trust_tier": trust.trust_tier,
+                "trust_points": trust.trust_points,
+                "nli_penalty": trust.nli_penalty,
+                "is_matching_blocked": trust.is_matching_blocked,
+                "nli_contradictions": trust.nli_contradictions,
+            },
+        }
+    except Exception as e:
+        logger.error(f"NLI consistency run failed for {request.user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
