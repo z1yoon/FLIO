@@ -82,14 +82,45 @@ class NLIConsistencyService:
         'ideal_relationship_dynamic': '이상적인 관계에 대해 "{value}"라고 답했습니다'
     }
 
-    # Known compatible statement pairs (to avoid false positives)
-    COMPATIBLE_PAIRS = [
-        ('높은 연봉', '돈보다 사람이 중요'),  # Can have high income but value people
-        ('안정적인 직장', '도전적인 삶'),      # Stable job but adventurous personality
+    # Known compatible statement pairs (keywords_a, keywords_b) — pre-filter before GPT call
+    # Each entry: if stmt_a contains any keyword from group_a AND stmt_b contains any from group_b
+    # (or vice versa), skip GPT — it's not a contradiction
+    COMPATIBLE_PAIRS: List[tuple] = [
+        (
+            ['높은 연봉', '억대 연봉', '고연봉', '연봉 1억', '연봉이 높', '수입이 많'],
+            ['돈보다 사람', '돈은 중요하지 않', '돈보다는', '물질보다', '돈이 전부는 아니'],
+        ),
+        (
+            ['안정적인 직장', '정규직', '공무원', '대기업', '직장이 안정'],
+            ['도전적인 삶', '모험', '새로운 도전', '자유롭게', '변화를 즐'],
+        ),
+        (
+            ['성공적인 커리어', '일이 중요', '커리어 우선', '일을 열심히'],
+            ['가정이 더 중요', '가족이 우선', '워라밸', '가족을 중시', '일보다 가정'],
+        ),
+        (
+            ['종교 없음', '무교', '종교가 없'],
+            ['명절', '제사', '차례', '전통을 중시', '가족 문화'],
+        ),
     ]
 
     def __init__(self):
         self.supabase = get_supabase_client()
+
+    def _is_known_compatible(self, stmt_a: str, stmt_b: str) -> bool:
+        """
+        Pre-filter: returns True if the pair is a known non-contradiction,
+        so we can skip the GPT call and save API cost.
+        Checks both directions (a→b and b→a).
+        """
+        for keywords_a, keywords_b in self.COMPATIBLE_PAIRS:
+            a_in_a = any(kw in stmt_a for kw in keywords_a)
+            b_in_b = any(kw in stmt_b for kw in keywords_b)
+            a_in_b = any(kw in stmt_b for kw in keywords_a)
+            b_in_a = any(kw in stmt_a for kw in keywords_b)
+            if (a_in_a and b_in_b) or (a_in_b and b_in_a):
+                return True
+        return False
 
     async def check_user_consistency(self, user_id: str) -> ConsistencyCheckResult:
         """
@@ -207,6 +238,9 @@ class NLIConsistencyService:
             contradictions = []
             for (source_a, stmt_a), (source_b, stmt_b) in statement_pairs:
                 if stmt_a and stmt_b:
+                    if self._is_known_compatible(stmt_a, stmt_b):
+                        logger.debug(f"Skipping known compatible pair: '{stmt_a[:40]}' / '{stmt_b[:40]}'")
+                        continue
                     result = await self._detect_contradiction(
                         source_a, stmt_a, source_b, stmt_b,
                         ConsistencyCheckType.PROFILE_VS_ANSWERS
@@ -243,27 +277,31 @@ class NLIConsistencyService:
 
                 # High income but unemployed is suspicious
                 if '1억' in income and employment == '무직':
-                    result = await self._detect_contradiction(
-                        'profile.income', f"연봉이 {income}입니다",
-                        'profile.employment', f"현재 {employment} 상태입니다",
-                        ConsistencyCheckType.CROSS_SECTION
-                    )
-                    if result:
-                        contradictions.append(result)
+                    stmt_a = f"연봉이 {income}입니다"
+                    stmt_b = f"현재 {employment} 상태입니다"
+                    if not self._is_known_compatible(stmt_a, stmt_b):
+                        result = await self._detect_contradiction(
+                            'profile.income', stmt_a,
+                            'profile.employment', stmt_b,
+                            ConsistencyCheckType.CROSS_SECTION
+                        )
+                        if result:
+                            contradictions.append(result)
 
             # Check job title vs income consistency
             if profile.get('job_title') and profile.get('annual_income_range'):
                 job = profile['job_title']
                 income = profile['annual_income_range']
-
-                # This would check if job title matches expected income range
-                result = await self._detect_contradiction(
-                    'profile.job', f"직업이 {job}입니다",
-                    'profile.income', f"연봉이 {income}입니다",
-                    ConsistencyCheckType.CROSS_SECTION
-                )
-                if result and result.contradiction_score > 0.6:
-                    contradictions.append(result)
+                stmt_a = f"직업이 {job}입니다"
+                stmt_b = f"연봉이 {income}입니다"
+                if not self._is_known_compatible(stmt_a, stmt_b):
+                    result = await self._detect_contradiction(
+                        'profile.job', stmt_a,
+                        'profile.income', stmt_b,
+                        ConsistencyCheckType.CROSS_SECTION
+                    )
+                    if result and result.contradiction_score > 0.6:
+                        contradictions.append(result)
 
             return contradictions
 
@@ -305,6 +343,9 @@ class NLIConsistencyService:
                     q2_id, answer2 = answer_list[j]
 
                     if answer1 and answer2:
+                        if self._is_known_compatible(answer1, answer2):
+                            logger.debug(f"Skipping known compatible pair: '{answer1[:40]}' / '{answer2[:40]}'")
+                            continue
                         result = await self._detect_contradiction(
                             f'answer.{q1_id}', answer1,
                             f'answer.{q2_id}', answer2,

@@ -12,6 +12,7 @@ import {
   ScrollView,
   Image,
   AccessibilityInfo,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ import { supabaseQuestionService, Question, Answer } from '../../services/supaba
 import { FLIOAlertAPI } from '../../components/FLIOAlert';
 import { supabase, getCurrentUserId } from '../../services/supabase/client';
 import { voiceAccessibilityService } from '../../services/voiceAccessibilityService';
+import { aiManagerService } from '../../services/aiManagerService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -65,6 +67,15 @@ export default function QuestionsScreen() {
   const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+
+  // Follow-up question state
+  const [showFollowup, setShowFollowup] = useState(false);
+  const [followupQuestion, setFollowupQuestion] = useState<string | null>(null);
+  const [followupLogId, setFollowupLogId] = useState<string | null>(null);
+  const [followupAnswer, setFollowupAnswer] = useState('');
+  const [pendingAnswer, setPendingAnswer] = useState<string | null>(null);
+  const [isCheckingFollowup, setIsCheckingFollowup] = useState(false);
+  const [showVagueNudge, setShowVagueNudge] = useState(false);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -459,10 +470,87 @@ export default function QuestionsScreen() {
     if (textAnswer.trim() && !isLoadingQuestion) {
       const answer = textAnswer.trim();
       setTextAnswer('');
-      
-      // Process the answer through AI service
+
+      // For text/open-ended questions, check for ambiguity first
+      if (currentQuestion?.type === 'text' && userId) {
+        setIsCheckingFollowup(true);
+        try {
+          const followupResult = await aiManagerService.checkForFollowup(
+            userId,
+            currentQuestion.id,
+            currentQuestion.text,
+            answer,
+            currentQuestion.category,
+            answersContext.previous_answers.map(a => ({
+              question_id: a.question_id,
+              question_text: a.question_text,
+              answer_value: a.answer_value,
+            })),
+          );
+
+          if (followupResult.is_ambiguous && followupResult.followup_question) {
+            setPendingAnswer(answer);
+            setFollowupQuestion(followupResult.followup_question);
+            setFollowupLogId(followupResult.log_id);
+            setShowFollowup(true);
+            setIsCheckingFollowup(false);
+            return;
+          }
+        } catch (e) {
+          console.log('Follow-up check skipped:', e);
+        } finally {
+          setIsCheckingFollowup(false);
+        }
+      }
+
       await processAnswerAndGetNext(answer);
     }
+  };
+
+  // Simple client-side vague check (mirrors backend heuristic, no API call)
+  const isAnswerVague = (text: string): boolean => {
+    const t = text.trim().toLowerCase();
+    if (t.length <= 5) return true;
+    const vaguePatterns = ['상관없어요', '상관없음', '괜찮아요', '모르겠어요', '글쎄요',
+      '그냥', '다 좋아요', '뭐든지', '아무거나', '적당히', '보통', '평범'];
+    if (vaguePatterns.some(p => t.includes(p))) return true;
+    if (t.split(' ').length <= 2) return true;
+    return false;
+  };
+
+  const handleFollowupSubmit = async () => {
+    if (!pendingAnswer) return;
+    if (followupLogId && followupAnswer.trim()) {
+      try {
+        await aiManagerService.saveFollowupAnswer(followupLogId, followupAnswer.trim());
+      } catch (e) {
+        console.log('Followup answer save failed (non-blocking):', e);
+      }
+      // If the follow-up answer is still vague, show a soft nudge
+      if (isAnswerVague(followupAnswer.trim())) {
+        setShowVagueNudge(true);
+        setTimeout(() => setShowVagueNudge(false), 4000);
+      }
+    }
+    setShowFollowup(false);
+    setFollowupQuestion(null);
+    setFollowupLogId(null);
+    setFollowupAnswer('');
+    await processAnswerAndGetNext(pendingAnswer);
+    setPendingAnswer(null);
+  };
+
+  const handleFollowupSkip = async () => {
+    if (!pendingAnswer) return;
+    // Skipping = user chose not to clarify; show nudge so they know it affects matching
+    setShowVagueNudge(true);
+    setTimeout(() => setShowVagueNudge(false), 4000);
+    setShowFollowup(false);
+    setFollowupQuestion(null);
+    setFollowupLogId(null);
+    setFollowupAnswer('');
+    await processAnswerAndGetNext(pendingAnswer);
+    setPendingAnswer(null);
   };
 
   const handleGoBack = () => {
@@ -793,7 +881,7 @@ export default function QuestionsScreen() {
         )}
 
         {/* Voice Input Button - Show when voice is enabled */}
-        {voiceEnabled && currentQuestion && currentQuestion.answer_type === 'text' && (
+        {voiceEnabled && currentQuestion && currentQuestion.type === 'text' && (
           <TouchableOpacity
             style={[styles.voiceButton, isListening && styles.voiceButtonActive]}
             onPress={handleVoiceInput}
@@ -815,6 +903,60 @@ export default function QuestionsScreen() {
         )}
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Follow-up Question Modal */}
+      {showFollowup && followupQuestion && (
+        <View style={styles.followupOverlay}>
+          <View style={styles.followupModal}>
+            <View style={styles.followupHeader}>
+              <View style={styles.followupBadge}>
+                <Ionicons name="chatbubble-ellipses" size={14} color="#40e0d0" />
+                <Text style={styles.followupBadgeText}>AI 매니저 추가 질문</Text>
+              </View>
+              <Text style={styles.followupTitle}>{followupQuestion}</Text>
+            </View>
+            <TextInput
+              style={styles.followupInput}
+              placeholder="더 구체적으로 알려주시면 더 나은 매칭을 해드릴게요..."
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              value={followupAnswer}
+              onChangeText={setFollowupAnswer}
+              multiline
+              maxLength={300}
+              autoFocus
+            />
+            <View style={styles.followupActions}>
+              <TouchableOpacity style={styles.followupSkipBtn} onPress={handleFollowupSkip}>
+                <Text style={styles.followupSkipText}>건너뛰기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.followupSubmitBtn, !followupAnswer.trim() && { opacity: 0.4 }]}
+                onPress={handleFollowupSubmit}
+              >
+                <Text style={styles.followupSubmitText}>답변하기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Checking Follow-up Indicator */}
+      {isCheckingFollowup && (
+        <View style={styles.checkingFollowupOverlay}>
+          <ActivityIndicator size="small" color="#40e0d0" />
+          <Text style={styles.checkingFollowupText}>AI 매니저가 답변을 분석 중...</Text>
+        </View>
+      )}
+
+      {/* Vague Answer Nudge — soft, auto-dismisses after 4s */}
+      {showVagueNudge && (
+        <View style={styles.vagueNudgeOverlay}>
+          <Ionicons name="information-circle-outline" size={18} color="#facc15" />
+          <Text style={styles.vagueNudgeText}>
+            구체적인 답변일수록 더 정확한 매칭이 이루어져요 💡
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -1191,5 +1333,132 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  followupOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+    zIndex: 100,
+  },
+  followupModal: {
+    backgroundColor: '#111827',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(64,224,208,0.3)',
+  },
+  followupHeader: {
+    marginBottom: 16,
+  },
+  followupBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  followupBadgeText: {
+    color: '#40e0d0',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  followupTitle: {
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  followupInput: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    color: '#fff',
+    fontSize: 15,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: 'rgba(64,224,208,0.25)',
+    marginBottom: 16,
+  },
+  followupActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  followupSkipBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+  },
+  followupSkipText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  followupSubmitBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#40e0d0',
+    alignItems: 'center',
+  },
+  followupSubmitText: {
+    color: '#0a0e1a',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  checkingFollowupOverlay: {
+    position: 'absolute',
+    bottom: 100,
+    left: 24,
+    right: 24,
+    backgroundColor: 'rgba(17,24,39,0.92)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 50,
+    borderWidth: 1,
+    borderColor: 'rgba(64,224,208,0.3)',
+  },
+  checkingFollowupText: {
+    color: '#40e0d0',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  vagueNudgeOverlay: {
+    position: 'absolute',
+    bottom: 100,
+    left: 24,
+    right: 24,
+    backgroundColor: 'rgba(250, 204, 21, 0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 50,
+    borderWidth: 1,
+    borderColor: 'rgba(250, 204, 21, 0.35)',
+  },
+  vagueNudgeText: {
+    color: '#facc15',
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 18,
   },
 });

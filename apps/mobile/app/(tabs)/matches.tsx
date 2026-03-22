@@ -22,6 +22,8 @@ import { FLIOAlertAPI } from '../../components/FLIOAlert';
 import { getCurrentUserId, supabase } from '../../services/supabase/client';
 import { supabaseQuestionService } from '../../services/supabaseQuestionService';
 import TrustBadge, { getTierFromScore } from '../../components/TrustBadge';
+import AIManagerChat from '../../components/AIManagerChat';
+import MatchFeedback from '../../components/MatchFeedback';
 
 const { width, height } = Dimensions.get('window');
 
@@ -45,6 +47,11 @@ export default function MatchesScreen() {
   const [trustScore, setTrustScore] = useState<number>(0);
   const [showTierFilter, setShowTierFilter] = useState(false);
   const [selectedTiers, setSelectedTiers] = useState<string[]>([]);
+
+  // AI Manager + Feedback state
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackMatch, setFeedbackMatch] = useState<MatchResult | null>(null);
 
   // Get default tier preferences based on current tier
   const getDefaultTierPreferences = (tier: string): string[] => {
@@ -526,7 +533,7 @@ export default function MatchesScreen() {
                   {/* Trust Badge */}
                   {match.trust_tier && (
                     <View style={styles.trustBadgeContainer}>
-                      <TrustBadge tier={match.trust_tier} size="small" />
+                      <TrustBadge tier={match.trust_tier as any} size="small" />
                     </View>
                   )}
 
@@ -570,6 +577,12 @@ export default function MatchesScreen() {
                     <Ionicons name="close" size={20} color="#FF6B6B" />
                   </TouchableOpacity>
                   <TouchableOpacity
+                    style={styles.feedbackButton}
+                    onPress={() => { setFeedbackMatch(match); setShowFeedback(true); }}
+                  >
+                    <Ionicons name="chatbubble-outline" size={18} color="rgba(255,255,255,0.7)" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     style={styles.likeButton}
                     onPress={() => handleLikeMatch(match)}
                   >
@@ -581,6 +594,50 @@ export default function MatchesScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* AI Manager Floating Button */}
+      {currentUserId && (
+        <TouchableOpacity
+          style={styles.aiManagerFAB}
+          onPress={() => setShowAIChat(true)}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={['#40e0d0', '#2E7D7A']}
+            style={styles.aiManagerFABGradient}
+          >
+            <Ionicons name="chatbubble-ellipses" size={22} color="#fff" />
+            <Text style={styles.aiManagerFABText}>AI 매니저</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
+      {/* AI Manager Chat Modal */}
+      {currentUserId && (
+        <AIManagerChat
+          userId={currentUserId}
+          visible={showAIChat}
+          onClose={() => setShowAIChat(false)}
+        />
+      )}
+
+      {/* Match Feedback Modal */}
+      {currentUserId && feedbackMatch && (
+        <MatchFeedback
+          visible={showFeedback}
+          userId={currentUserId}
+          matchUserId={feedbackMatch.user_id}
+          matchName={feedbackMatch.name || feedbackMatch.nickname}
+          onClose={() => { setShowFeedback(false); setFeedbackMatch(null); }}
+          onSubmitted={(needsDiagnosis) => {
+            if (needsDiagnosis) {
+              setTimeout(() => {
+                setShowAIChat(true);
+              }, 400);
+            }
+          }}
+        />
+      )}
 
       {/* Match Explanation Modal */}
       {showExplanation && selectedMatch && (
@@ -1484,5 +1541,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.8)',
     lineHeight: 18,
+  },
+  feedbackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aiManagerFAB: {
+    position: 'absolute',
+    bottom: 28,
+    right: 20,
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: '#40e0d0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+    zIndex: 20,
+  },
+  aiManagerFABGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    gap: 8,
+  },
+  aiManagerFABText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 });

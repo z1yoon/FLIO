@@ -37,6 +37,16 @@ class AzureOpenAIService:
     Handles embeddings, text analysis, and match explanations
     """
     
+    # Shared AI manager persona — used in ALL AI manager LLM calls for consistency.
+    # Every method that acts as the "AI manager" must include this as the system prompt base.
+    _MANAGER_PERSONA = (
+        "당신은 FLIO의 AI 결혼 매니저입니다. "
+        "10년 경력의 결혼정보회사 상담사이자 프로필 컨설턴트로서, "
+        "따뜻하고 전문적인 태도로 회원들의 매칭 성공을 돕습니다. "
+        "한국 결혼 문화와 가치관을 깊이 이해하며, "
+        "진실되고 구체적인 정보를 바탕으로 신뢰할 수 있는 조언을 제공합니다."
+    )
+
     def __init__(self):
         self.client = AsyncAzureOpenAI(
             api_key=os.getenv("AZURE_OPENAI_API_KEY"),
@@ -82,18 +92,15 @@ class AzureOpenAIService:
         Analyze user's answer for clarity and extract insights
         Korean marriage counselor perspective for cultural accuracy
         """
-        system_prompt = """
-        당신은 한국의 결혼정보회사에서 10년 경력을 가진 전문 상담사입니다.
-        사용자의 답변을 분석하여 결혼 상대 매칭에 도움이 되는 통찰을 제공해주세요.
-        
-        분석 기준:
-        1. 답변의 구체성과 명확성 (1-10점)
-        2. 결혼관이나 가치관이 잘 드러나는지
-        3. 추가 질문이 필요한지
-        4. 핵심 인사이트 추출
-        
-        답변은 따뜻하고 이해심 있는 톤으로 해주세요.
-        """
+        system_prompt = (
+            self._MANAGER_PERSONA + "\n\n"
+            "역할: 사용자의 답변을 분석하여 결혼 상대 매칭에 도움이 되는 통찰을 제공합니다.\n\n"
+            "분석 기준:\n"
+            "1. 답변의 구체성과 명확성 (1-10점)\n"
+            "2. 결혼관이나 가치관이 잘 드러나는지\n"
+            "3. 추가 질문이 필요한지\n"
+            "4. 핵심 인사이트 추출"
+        )
         
         user_prompt = f"""
         질문: {question}
@@ -497,6 +504,276 @@ class AzureOpenAIService:
             logger.error(f"Failed to analyze preference with AI: {e}")
             return self._fallback_preference_analysis(preference_text)
     
+    async def generate_followup_question(
+        self,
+        question_text: str,
+        answer: str,
+        question_category: str,
+        previous_answers: List[Dict] = None,
+    ) -> Dict[str, Any]:
+        """
+        Detect ambiguity in a user's answer and generate a context-aware follow-up question.
+        Returns: {ambiguity_score, reason, followup_question}
+        """
+        prev_context = ""
+        if previous_answers:
+            recent = previous_answers[-3:]
+            prev_context = "\n".join(
+                f"- {a.get('question_text', a.get('question_id', ''))}: {a.get('answer_value', '')}"
+                for a in recent
+            )
+
+        system_prompt = (
+            self._MANAGER_PERSONA + "\n\n"
+            "역할: 사용자의 답변이 모호하거나 불명확한 경우, 더 구체적인 정보를 수집하기 위해 "
+            "맥락에 맞는 추가 질문을 생성합니다.\n\n"
+            "모호 판단 기준:\n"
+            "- 모호한 표현: '상관없어요', '괜찮아요', '모르겠어요', 한 단어 답변 등\n"
+            "- 구체성 부족: 본인의 실제 생각/경험이 드러나지 않는 답변\n"
+            "- 맥락 불일치: 이전 답변과 모순되거나 연결이 약한 답변"
+        )
+
+        user_prompt = f"""
+        질문 카테고리: {question_category}
+        원본 질문: {question_text}
+        사용자 답변: "{answer}"
+        
+        {f"이전 답변 맥락:{chr(10)}{prev_context}" if prev_context else ""}
+        
+        위 답변을 분석하여 다음 JSON 형식으로 응답하세요:
+        {{
+            "ambiguity_score": 0.0~1.0 (0=명확, 1=완전히 모호),
+            "reason": "모호한 이유 또는 명확한 이유 (한 문장)",
+            "followup_question": "추가 질문 (필요한 경우만, 없으면 null)",
+            "followup_example": "추가 질문에 대한 답변 예시 (있으면)"
+        }}
+        
+        예시:
+        답변 "종교는 상관없어요" → followup: "종교 자체를 중요하게 생각하지 않으시는 건가요, 
+        아니면 상대방의 종교에 따라 유연하게 생각하시는 건가요?"
+        """
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,
+                max_tokens=500,
+            )
+            content = response.choices[0].message.content.strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            return json.loads(content.strip())
+        except Exception as e:
+            logger.error(f"generate_followup_question failed: {e}")
+            return {"ambiguity_score": 0.5, "reason": "분석 실패", "followup_question": None}
+
+    async def diagnose_profile_quality(
+        self,
+        profile_data: Dict,
+        answers_summary: Dict,
+        existing_issues: List[Dict] = None,
+    ) -> Dict[str, Any]:
+        """
+        AI-powered profile quality analysis beyond rule-based checks.
+        Returns additional issues, recommendations, market_percentile.
+        """
+        system_prompt = (
+            self._MANAGER_PERSONA + "\n\n"
+            "역할: 수천 개의 프로필을 분석한 경험을 바탕으로 사용자 프로필의 강점과 개선점을 진단합니다.\n\n"
+            "핵심 관점:\n"
+            "- 답변의 진실성과 구체성\n"
+            "- 매칭 상대방이 매력을 느낄 수 있는 요소\n"
+            "- 결혼 의지와 진지함이 전달되는지\n"
+            "- 개인의 가치관이 명확하게 드러나는지"
+        )
+
+        open_answers = answers_summary.get("open_answers", [])
+        answers_text = "\n".join(f"- {a}" for a in open_answers[:3]) if open_answers else "서술형 답변 없음"
+
+        user_prompt = f"""
+        프로필 요약:
+        - 사진 수: {len(profile_data.get('photos', []))}
+        - 답변 완성도: {answers_summary.get('answered_count', 0)}/{answers_summary.get('total_questions', 40)}
+        - 딜브레이커 수: {answers_summary.get('dealbreaker_count', 0)}
+        
+        서술형 답변 샘플:
+        {answers_text}
+        
+        이미 발견된 문제들:
+        {json.dumps(existing_issues or [], ensure_ascii=False)}
+        
+        추가 분석을 통해 다음 JSON 형식으로 응답하세요:
+        {{
+            "additional_issues": [
+                {{
+                    "severity": "high/medium/low",
+                    "issue": "문제 설명",
+                    "impact": "매칭에 미치는 영향",
+                    "solution": "구체적 해결 방안"
+                }}
+            ],
+            "recommendations": ["추천 1", "추천 2", "추천 3"],
+            "market_percentile": 상위 몇 % (숫자만, 낮을수록 좋음, 예: 30은 상위 30%)
+        }}
+        
+        이미 발견된 문제는 중복 언급하지 마세요.
+        """
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.4,
+                max_tokens=800,
+            )
+            content = response.choices[0].message.content.strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            return json.loads(content.strip())
+        except Exception as e:
+            logger.error(f"diagnose_profile_quality failed: {e}")
+            return {"additional_issues": [], "recommendations": [], "market_percentile": 50}
+
+    async def ai_manager_chat(
+        self,
+        user_message: str,
+        conversation_history: List[Dict],
+        user_context: Dict,
+    ) -> Dict[str, Any]:
+        """
+        Conversational AI manager response.
+        Returns: {message, suggested_actions, intent, extracted_insights}
+        """
+        nickname = user_context.get("nickname", "회원님")
+        profile_score = user_context.get("profile_score")
+        top_issues = user_context.get("top_issues", [])
+        feedback_summary = user_context.get("feedback_summary", {})
+
+        context_block = f"""
+        회원 정보:
+        - 닉네임: {nickname}
+        - 신뢰 등급: {user_context.get('trust_tier', '미확인')}
+        - 구독 상태: {user_context.get('subscription_status', 'none')}
+        {f"- 프로필 품질 점수: {profile_score}/100" if profile_score else ""}
+        {f"- 주요 프로필 개선 필요사항: {', '.join(top_issues)}" if top_issues else ""}
+        {f"- 매칭 피드백 평균: {feedback_summary.get('avg_rating', 'N/A')}점" if feedback_summary.get('total_feedback') else ""}
+        """
+
+        system_prompt = (
+            self._MANAGER_PERSONA + "\n\n"
+            + context_block +
+            "\n역할:\n"
+            "- 결혼/연애 목표와 타임라인을 대화를 통해 파악\n"
+            "- 매칭 불만족 시 원인 분석 및 구체적 해결책 제시\n"
+            "- 프로필 개선 방향 코칭 (구체적, 실행 가능하게)\n"
+            "- 매칭된 상대에 대한 추가 인사이트 제공\n"
+            "- 정서적 지지와 현실적 조언 균형\n\n"
+            "말투 지침:\n"
+            "- 따뜻하되 전문적인 톤 유지\n"
+            "- 구체적 사례와 수치로 설명\n"
+            "- 2-4문장으로 간결하게 (필요 시 더 길게)\n"
+            "- 과도한 존댓말이나 딱딱한 격식 피하기\n\n"
+            'JSON 형식으로 응답: {"message": "응답 텍스트", "intent": "matching_help|profile_coaching|emotional_support|general_info", "suggested_actions": ["액션1", "액션2"], "extracted_insights": {}}'
+        )
+
+        # Build conversation history for context (last 10 messages)
+        history_messages = []
+        for msg in conversation_history[-10:]:
+            role = msg.get("role", "user")
+            if role in ("user", "assistant"):
+                history_messages.append({"role": role, "content": msg.get("content", "")})
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *history_messages,
+                    {"role": "user", "content": user_message},
+                ],
+                temperature=0.7,
+                max_tokens=600,
+            )
+            content = response.choices[0].message.content.strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            return json.loads(content.strip())
+        except Exception as e:
+            logger.error(f"ai_manager_chat failed: {e}")
+            return {
+                "message": f"{nickname}, 잠시 후 다시 시도해 주세요. 연결에 일시적인 문제가 있습니다.",
+                "intent": "error",
+                "suggested_actions": ["다시 시도"],
+                "extracted_insights": {},
+            }
+
+    async def generate_coaching_message(
+        self,
+        nickname: str,
+        trigger: Dict[str, Any],
+        profile_completion_pct: int,
+        avg_rating: float,
+    ) -> Dict[str, Any]:
+        """
+        Generate a proactive coaching message based on user state and trigger.
+        Returns: {message, suggested_actions}
+        """
+        trigger_type = trigger.get("type", "general")
+        trigger_desc = {
+            "first_time_welcome": "처음 AI 매니저를 만나는 사용자입니다.",
+            "inactivity_nudge": f"{trigger.get('days_inactive', 3)}일간 활동이 없는 사용자입니다.",
+            "profile_incomplete": f"프로필 완성도가 {profile_completion_pct}%이고, 남은 질문이 {trigger.get('remaining', 0)}개입니다.",
+            "low_satisfaction": f"최근 매칭 평균 만족도가 {avg_rating}점이며, 주요 불만 사항은 {trigger.get('common_dealbreakers', [])}입니다.",
+            "milestone_first_feedback": "첫 번째 매칭 피드백을 남긴 사용자입니다.",
+            "milestone_profile_complete": "프로필을 100% 완성한 사용자입니다.",
+        }.get(trigger_type, "일반 코칭 메시지를 생성합니다.")
+
+        system_prompt = (
+            self._MANAGER_PERSONA + "\n\n"
+            "역할: 사용자에게 먼저 다가가는 프로액티브 코칭 메시지를 작성합니다.\n"
+            "원칙:\n"
+            "- 짧고 따뜻하게 (2-3문장)\n"
+            "- 구체적 행동을 유도\n"
+            "- 부담주지 않으면서 동기부여\n"
+            "- 사용자 이름을 자연스럽게 사용\n\n"
+            'JSON 형식: {"message": "코칭 메시지", "suggested_actions": ["액션1", "액션2"]}'
+        )
+
+        user_prompt = f"닉네임: {nickname}\n트리거: {trigger_desc}\n프로필 완성도: {profile_completion_pct}%"
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.7,
+                max_tokens=300,
+            )
+            content = response.choices[0].message.content.strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            return json.loads(content.strip())
+        except Exception as e:
+            logger.error(f"generate_coaching_message failed: {e}")
+            raise
+
     def _fallback_preference_analysis(self, preference_text: str) -> Dict[str, Any]:
         """Simple fallback when AI analysis fails"""
         preference_lower = preference_text.lower()

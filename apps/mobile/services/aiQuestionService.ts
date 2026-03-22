@@ -63,6 +63,13 @@ export interface UserContext {
   };
 }
 
+export interface VerificationStatus {
+  id_verified?: boolean;
+  education_verified?: boolean;
+  income_verified?: boolean;
+  employment_verified?: boolean;
+}
+
 export interface MatchResult {
   user_id: string;
   compatibility_score: number;
@@ -71,6 +78,9 @@ export interface MatchResult {
   name?: string;
   nickname?: string;
   age?: number;
+  trust_tier?: string;
+  trust_score?: number;
+  verification_status?: VerificationStatus;
 }
 
 export interface MatchExplanation {
@@ -407,10 +417,13 @@ class AIQuestionService {
     };
 
     console.log('🔍 Testing backend connectivity...');
+    const healthAbort = new AbortController();
+    const healthTimeout = setTimeout(() => healthAbort.abort(), 5000);
     const healthResponse = await fetch(`${this.baseUrl.replace('/api/v1', '')}/health`, {
       method: 'GET',
-      timeout: 5000
+      signal: healthAbort.signal,
     });
+    clearTimeout(healthTimeout);
     
     if (healthResponse.ok) {
       result.backend = true;

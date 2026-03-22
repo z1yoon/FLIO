@@ -49,37 +49,49 @@ class ProfileEmbeddingService:
         self.supabase = get_supabase_client()
         self.embedding_dimension = 1024  # Azure OpenAI text-embedding-3-large
     
-    async def build_profile_text(self, user_answers: Dict[str, str]) -> str:
+    async def build_profile_text(self, user_answers: Dict[str, str], user_id: Optional[str] = None) -> str:
         """
-        Build text from ONLY the 3 open-ended questions for embedding generation
-        Static choice questions are handled by exact matching, not embeddings
-        Only text questions need semantic similarity via embeddings
+        Build profile text for embedding from open-ended question answers.
+        If a follow-up answer exists for a question (from followup_question_log),
+        it is appended to the original answer so the richer context is embedded.
+        Static choice questions are handled by exact matching, not embeddings.
         """
-        # Only include the 3 open-ended text questions
         text_question_ids = [
-            'personal_values_lifestyle',      # Q36: 가치관과 라이프스타일
-            'ideal_relationship_dynamic',     # Q37: 이상적인 관계 역학
-            'conflict_growth_philosophy',     # Q39: 갈등과 성장 철학
+            'personal_values_lifestyle',
+            'ideal_relationship_dynamic',
+            'conflict_growth_philosophy',
         ]
-        
-        # Extract only text question answers
+
+        # Fetch follow-up answers for this user's text questions (if user_id provided)
+        followup_answers: Dict[str, str] = {}
+        if user_id:
+            try:
+                result = self.supabase.table('followup_question_log').select(
+                    'question_id, followup_answer'
+                ).eq('user_id', user_id).in_(
+                    'question_id', text_question_ids
+                ).not_.is_('followup_answer', 'null').execute()
+                for row in (result.data or []):
+                    if row.get('followup_answer'):
+                        followup_answers[row['question_id']] = row['followup_answer']
+            except Exception as e:
+                logger.warning(f"Could not fetch follow-up answers for {user_id}: {e}")
+
         text_answers = []
         for qid in text_question_ids:
             if qid in user_answers and user_answers[qid]:
                 answer = user_answers[qid].strip()
-                if answer:  # Only include non-empty answers
-                    text_answers.append(f"{answer}")
-        
+                if answer:
+                    # Append follow-up context if available
+                    if qid in followup_answers:
+                        answer = f"{answer} {followup_answers[qid].strip()}"
+                    text_answers.append(answer)
+
         if not text_answers:
-            # If no text answers yet, return a minimal profile
-            # This allows embedding creation even before text questions are answered
             return "한국인 결혼 대상자 프로필: 프로필 작성 중"
-        
-        # Combine text answers with context
+
         full_profile = " | ".join(text_answers)
-        contextualized_profile = f"한국인 결혼 대상자 프로필: {full_profile}"
-        
-        return contextualized_profile
+        return f"한국인 결혼 대상자 프로필: {full_profile}"
     
     # Removed: _build_personality_section, _build_values_section, 
     # _build_relationship_section, _build_communication_section
@@ -103,8 +115,8 @@ class ProfileEmbeddingService:
             if not user_answers:
                 raise ValueError(f"No answers found for user {user_id}")
             
-            # 2. Build profile text (Korean)
-            profile_text_korean = await self.build_profile_text(user_answers)
+            # 2. Build profile text (Korean), including any follow-up answers
+            profile_text_korean = await self.build_profile_text(user_answers, user_id=user_id)
             logger.info(f"Built Korean profile text: {len(profile_text_korean)} chars")
             
             # 3. Translate to English for cost-efficient embedding
@@ -276,8 +288,7 @@ class ProfileEmbeddingService:
                 "detailed_scores": compatibility,
                 "score_breakdown": {
                     "static_questions": f"{compatibility.get('static_score', 0):.1%} (60% weight)",
-                    "importance_bonus": f"{compatibility.get('importance_bonus', 0):.1%} (20% weight)",
-                    "azure_embedding": f"{compatibility.get('embedding_score', 0):.1%} (20% weight)",
+                    "open_ended_embedding": f"{compatibility.get('embedding_score', 0):.1%} (40% weight)",
                     "total": f"{compatibility['total_score']:.1%}"
                 },
             }
@@ -397,48 +408,38 @@ class ProfileEmbeddingService:
 # ... (rest of the code remains the same)
     async def _calculate_compatibility(self, user_a_id: str, user_b_id: str) -> Dict[str, float]:
         """
-        Calculate detailed compatibility score between two users
+        Calculate detailed compatibility score between two users.
 
-        Hybrid Algorithm (Prioritizes Concrete Over AI):
-        - 60% Static Question Matching (concrete answer alignment)
-        - 20% Importance/Dealbreaker Bonus (user-defined weights)
-        - 20% Azure OpenAI Embedding Similarity (semantic understanding)
-
-        This approach is more reliable than pure AI matching.
+        Hybrid Algorithm:
+        - 60% Static question matching (choice questions, with per-user learned weights)
+        - 40% Open-ended answer embedding similarity (semantic understanding)
         """
         try:
-            # 1. Get embeddings for both users (Azure OpenAI similarity)
             embedding_a = await self._get_user_embedding(user_a_id)
             embedding_b = await self._get_user_embedding(user_b_id)
-            
+
             if not embedding_a or not embedding_b:
-                return {'total_score': 0.0, 'embedding_score': 0.0, 'static_score': 0.0, 'importance_bonus': 0.0}
-            
-            # 2. Calculate static question matching score (60% weight) - PRIORITIZED
+                return {'total_score': 0.0, 'embedding_score': 0.0, 'static_score': 0.0}
+
+            # 60%: static choice question matching (uses per-user learned weights)
             static_score = await self._calculate_static_question_score(user_a_id, user_b_id) * 0.6
-            
-            # 3. Calculate importance bonus (20% weight) - Dealbreakers matter
-            importance_bonus = await self._calculate_importance_bonus(user_a_id, user_b_id) * 0.2
-            
-            # 4. Calculate Azure embedding similarity (20% weight) - Semantic understanding
+
+            # 40%: open-ended answer embedding similarity
             embedding_similarity = cosine_similarity([embedding_a], [embedding_b])[0][0]
-            embedding_score = float(embedding_similarity) * 0.2
-            
-            # 5. Combine all scores (Hybrid Algorithm)
-            total_score = static_score + importance_bonus + embedding_score
-            
+            embedding_score = float(embedding_similarity) * 0.4
+
+            total_score = static_score + embedding_score
+
             return {
-                'total_score': min(max(total_score, 0.0), 1.0),  # Clamp between 0-1
+                'total_score': min(max(total_score, 0.0), 1.0),
                 'embedding_score': embedding_score,
                 'static_score': static_score,
-                'importance_bonus': importance_bonus,
                 'similarity_score': float(embedding_similarity),
-                'cultural_bonus': 0.0
             }
-            
+
         except Exception as e:
             logger.error(f"Compatibility calculation failed: {e}")
-            return {'total_score': 0.0, 'similarity_score': 0.0, 'cultural_bonus': 0.0}
+            return {'total_score': 0.0, 'similarity_score': 0.0}
     
     async def _calculate_cultural_bonus(self, user_a_id: str, user_b_id: str) -> float:
         """Calculate Korean cultural compatibility bonus"""
@@ -504,44 +505,54 @@ class ProfileEmbeddingService:
     
     async def _calculate_static_question_score(self, user_a_id: str, user_b_id: str) -> float:
         """
-        Calculate compatibility based on static choice question matching only
-        Includes partial matches (0.5 weight) for scoring
-        Excludes text questions (which are used for embedding similarity instead)
+        Calculate compatibility based on static choice question matching.
+        Applies per-user learned weights (from reshuffle feedback) for personalization.
+        Text/open-ended questions are excluded — those go through embedding similarity.
         """
         try:
-            # Text questions that should be excluded from static matching
             text_question_ids = {
                 'personal_values_lifestyle', 'ideal_relationship_dynamic', 'conflict_growth_philosophy'
             }
-            
+
             answers_a = await self._fetch_user_answers(user_a_id)
             answers_b = await self._fetch_user_answers(user_b_id)
-            
-            matching_score = 0.0
-            total_questions = 0
-            
-            # Compare only choice questions (exclude text questions)
+            user_weights = await self._get_user_question_weights(user_a_id)
+
+            weighted_score = 0.0
+            total_weight = 0.0
+
             for question_id in answers_a.keys():
-                # Skip text questions - they're used for embedding similarity
                 if question_id in text_question_ids:
                     continue
-                    
                 if question_id in answers_b:
-                    # Exact match gets full points
+                    weight = user_weights.get(question_id, 1.0)
                     if answers_a[question_id] == answers_b[question_id]:
-                        matching_score += 1.0
-                    # Partial match for similar answers
+                        weighted_score += 1.0 * weight
                     elif answers_a[question_id] and answers_b[question_id]:
-                        # Simple similarity check
-                        matching_score += 0.5
-                    total_questions += 1
-            
-            logger.info(f"Static question score (weighted): {matching_score}/{total_questions} = {matching_score/total_questions if total_questions > 0 else 0:.1%}")
-            return matching_score / total_questions if total_questions > 0 else 0.0
-            
+                        weighted_score += 0.5 * weight
+                    total_weight += weight
+
+            score = weighted_score / total_weight if total_weight > 0 else 0.0
+            logger.info(f"Static score for {user_a_id}: {score:.1%} (personalized weights applied)")
+            return score
+
         except Exception as e:
             logger.error(f"Static score calculation failed: {e}")
             return 0.0
+
+    async def _get_user_question_weights(self, user_id: str) -> Dict[str, float]:
+        """
+        Fetch per-user learned question weights from DB.
+        Returns empty dict if no weights exist yet (falls back to equal weighting).
+        """
+        try:
+            result = self.supabase.table('user_question_weights').select(
+                'question_id, weight'
+            ).eq('user_id', user_id).execute()
+            return {row['question_id']: row['weight'] for row in (result.data or [])}
+        except Exception as e:
+            logger.warning(f"Could not fetch question weights for {user_id}: {e}")
+            return {}
     
     async def _get_dealbreakers(self, user_id: str) -> Dict[str, str]:
         """
@@ -1392,19 +1403,115 @@ class ProfileEmbeddingService:
 
 # Singleton instance
     async def store_reshuffle_feedback(self, user_id: str, preference_text: str, rejected_match_ids: List[str] = None):
-        """Store user's reshuffle preference and rejected matches for future analysis"""
+        """
+        Store reshuffle feedback and update per-user question weights.
+        1. Save raw feedback to DB
+        2. Embed the preference text → extract which question dimensions matter
+        3. Update user_question_weights for personalized future matching
+        """
         try:
-            result = self.supabase.table('reshuffle_feedback').insert({
+            self.supabase.table('reshuffle_feedback').insert({
                 'user_id': user_id,
                 'preference_text': preference_text,
                 'rejected_match_ids': rejected_match_ids or []
             }).execute()
-            logger.info(f"Stored reshuffle feedback for user {user_id} with {len(rejected_match_ids or [])} rejected matches")
-            return result.data
+            logger.info(f"Stored reshuffle feedback for {user_id}")
         except Exception as e:
             logger.warning(f"Reshuffle feedback storage not available: {e}")
-            # Continue without storing feedback
-            return None
+
+        # Update per-user question weights from this feedback
+        await self._update_question_weights_from_feedback(user_id, preference_text, rejected_match_ids or [])
+
+    async def _update_question_weights_from_feedback(
+        self, user_id: str, preference_text: str, rejected_match_ids: List[str]
+    ) -> None:
+        """
+        Find which questions are most semantically relevant to the user's reshuffle reason
+        and boost their weights.
+
+        Works for any free-text reason — no hardcoded keyword map.
+        Steps:
+        1. Embed the preference text (what the user actually cares about)
+        2. Load all choice questions from DB with cached text embeddings
+        3. Cosine similarity → pick top-5 most relevant questions
+        4. Upsert user_question_weights with +0.2 bump per session (cap 3.0)
+        """
+        try:
+            # 1. Embed the reason text
+            reason_embedding_resp = await azure_openai_service.generate_profile_embedding(preference_text)
+            reason_vec = reason_embedding_resp.embedding
+
+            # 2. Load question text embeddings (in-memory cache on service instance)
+            question_embeddings = await self._get_question_text_embeddings()
+            if not question_embeddings:
+                return
+
+            # 3. Cosine similarity between reason and each question
+            question_ids = list(question_embeddings.keys())
+            question_vecs = [question_embeddings[qid] for qid in question_ids]
+            similarities = cosine_similarity([reason_vec], question_vecs)[0]
+
+            # Top-5 most relevant questions
+            top_indices = sorted(range(len(similarities)), key=lambda i: similarities[i], reverse=True)[:5]
+            top_questions = [question_ids[i] for i in top_indices if similarities[i] > 0.5]
+
+            if not top_questions:
+                logger.info(f"No sufficiently similar questions found for feedback from {user_id}")
+                return
+
+            # 4. Upsert weights
+            current_weights = await self._get_user_question_weights(user_id)
+            for qid in top_questions:
+                current = current_weights.get(qid, 1.0)
+                new_weight = min(current + 0.2, 3.0)
+                existing_count = 0
+                if qid in current_weights:
+                    try:
+                        row = self.supabase.table('user_question_weights').select(
+                            'feedback_count'
+                        ).eq('user_id', user_id).eq('question_id', qid).maybe_single().execute()
+                        existing_count = row.data['feedback_count'] if row.data else 0
+                    except Exception:
+                        existing_count = 0
+                self.supabase.table('user_question_weights').upsert({
+                    'user_id': user_id,
+                    'question_id': qid,
+                    'weight': new_weight,
+                    'feedback_count': existing_count + 1,
+                }, on_conflict='user_id,question_id').execute()
+
+            logger.info(f"Updated question weights for {user_id}: boosted {len(top_questions)} questions via semantic match")
+
+        except Exception as e:
+            logger.warning(f"Weight update from feedback failed for {user_id}: {e}")
+
+    async def _get_question_text_embeddings(self) -> Dict[str, List[float]]:
+        """
+        Return per-question text embeddings from the DB (questions.text_embedding).
+        Uses an in-memory cache — populated once per service lifetime from the DB,
+        not from the Azure API. Embeddings are pre-seeded via seed_question_embeddings.py.
+        """
+        if hasattr(self, '_question_embeddings_cache') and self._question_embeddings_cache:
+            return self._question_embeddings_cache
+
+        try:
+            result = self.supabase.table('questions').select(
+                'id, text_embedding'
+            ).eq('answer_type', 'choice').not_.is_('text_embedding', 'null').execute()
+
+            cache: Dict[str, List[float]] = {
+                row['id']: row['text_embedding']
+                for row in (result.data or [])
+                if row.get('text_embedding')
+            }
+
+            self._question_embeddings_cache = cache
+            logger.info(f"Loaded {len(cache)} question embeddings from DB")
+            return cache
+
+        except Exception as e:
+            logger.warning(f"Failed to load question embeddings from DB: {e}")
+            return {}
     
     async def get_reshuffle_context(self, user_id: str, limit: int = 3) -> List[Dict]:
         """Get user's recent reshuffle preferences for context"""
