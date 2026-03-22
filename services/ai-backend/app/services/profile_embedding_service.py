@@ -294,7 +294,7 @@ class ProfileEmbeddingService:
                 },
                 "detailed_scores": compatibility,
                 "score_breakdown": {
-                    "static_questions": f"{compatibility.get('static_score', 0):.1%} (60% weight)",
+                    "static_questions": f"{compatibility.get('static_score', 0):.1%} (60% weight, option-distance × learned_weight)",
                     "open_ended_embedding": f"{compatibility.get('embedding_score', 0):.1%} (40% weight)",
                     "total": f"{compatibility['total_score']:.1%}"
                 },
@@ -514,11 +514,12 @@ class ProfileEmbeddingService:
         """
         Calculate compatibility from choice questions using weighted similarity.
 
-        Score per question = option_distance_similarity × base_weight × learned_weight
+        Score per question = option_distance_similarity × learned_weight
         Final score = sum(weighted scores) / sum(total weights)
 
-        - base_weight: research-based importance from DB (0.5-1.0)
-        - learned_weight: per-user Pearson learning (0.1-3.0, default 1.0)
+        - learned_weight: per-user Pearson learning from reshuffle feedback (0.1-3.0, default 1.0).
+          New users start with equal weight on all questions.
+          Weight grows automatically as the user reshuffles and explains why.
         - option_distance_similarity: how close the chosen options are in the
           ordered option list (1.0=exact, 0.75=adjacent, 0.45=2 apart, 0.15=opposite)
 
@@ -554,16 +555,14 @@ class ProfileEmbeddingService:
                     continue  # hard filter handled separately
 
                 options = meta.get('options', [])
-                base_w = meta.get('base_weight', 0.5)
                 learned_w = user_weights.get(question_id, 1.0)
-                effective_weight = base_w * learned_w
 
                 similarity = self._option_similarity(
                     answers_a[question_id], answers_b[question_id], options
                 )
 
-                weighted_score += similarity * effective_weight
-                total_weight += effective_weight
+                weighted_score += similarity * learned_w
+                total_weight += learned_w
 
             score = weighted_score / total_weight if total_weight > 0 else 0.0
             logger.info(f"Static score for {user_a_id}: {score:.1%} (base_weight × learned × distance)")
@@ -605,24 +604,25 @@ class ProfileEmbeddingService:
 
     async def _load_question_options_cache(self) -> Dict[str, Any]:
         """
-        Load choice question metadata (options, base_weight, is_dealbreaker)
-        from DB. Cached for the service lifetime — questions rarely change.
+        Load choice question metadata (options order + is_dealbreaker) from DB.
+        Cached for the service lifetime — questions rarely change.
+        base_weight is intentionally excluded: importance is determined entirely
+        by per-user learned_weight, not fixed research assumptions.
         """
         if hasattr(self, '_question_options_cache') and self._question_options_cache:
             return self._question_options_cache
         try:
             result = self.supabase.table('questions').select(
-                'id, options, base_weight, can_be_dealbreaker'
+                'id, options, can_be_dealbreaker'
             ).eq('answer_type', 'choice').execute()
             cache: Dict[str, Any] = {}
             for row in (result.data or []):
                 cache[row['id']] = {
                     'options': [opt['value'] for opt in (row.get('options') or [])],
-                    'base_weight': row.get('base_weight', 0.5),
                     'is_dealbreaker': row.get('can_be_dealbreaker', False),
                 }
             self._question_options_cache = cache
-            logger.info(f"Cached metadata for {len(cache)} choice questions")
+            logger.info(f"Cached option order for {len(cache)} choice questions")
             return cache
         except Exception as e:
             logger.warning(f"Could not load question options cache: {e}")
