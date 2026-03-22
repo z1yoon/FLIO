@@ -60,6 +60,13 @@ class ProfileEmbeddingService:
             'personal_values_lifestyle',
             'ideal_relationship_dynamic',
             'conflict_growth_philosophy',
+            'past_conflict_learning',
+            'family_relationship_impact',
+            'money_philosophy_goals',
+            'love_expression_style',
+            'growth_support_philosophy',
+            'relationship_deal_makers',
+            'life_challenges_response',
         ]
 
         # Fetch follow-up answers for this user's text questions (if user_id provided)
@@ -505,18 +512,33 @@ class ProfileEmbeddingService:
     
     async def _calculate_static_question_score(self, user_a_id: str, user_b_id: str) -> float:
         """
-        Calculate compatibility based on static choice question matching.
-        Applies per-user learned weights (from reshuffle feedback) for personalization.
-        Text/open-ended questions are excluded — those go through embedding similarity.
+        Calculate compatibility from choice questions using weighted similarity.
+
+        Score per question = option_distance_similarity × base_weight × learned_weight
+        Final score = sum(weighted scores) / sum(total weights)
+
+        - base_weight: research-based importance from DB (0.5-1.0)
+        - learned_weight: per-user Pearson learning (0.1-3.0, default 1.0)
+        - option_distance_similarity: how close the chosen options are in the
+          ordered option list (1.0=exact, 0.75=adjacent, 0.45=2 apart, 0.15=opposite)
+
+        Dealbreaker questions (can_be_dealbreaker=true) are excluded here —
+        they are handled as hard filters in _check_dealbreaker_compatibility.
+        Text questions are excluded — they go through embedding similarity.
         """
         try:
             text_question_ids = {
-                'personal_values_lifestyle', 'ideal_relationship_dynamic', 'conflict_growth_philosophy'
+                'personal_values_lifestyle', 'ideal_relationship_dynamic',
+                'conflict_growth_philosophy', 'past_conflict_learning',
+                'family_relationship_impact', 'money_philosophy_goals',
+                'love_expression_style', 'growth_support_philosophy',
+                'relationship_deal_makers', 'life_challenges_response',
             }
 
             answers_a = await self._fetch_user_answers(user_a_id)
             answers_b = await self._fetch_user_answers(user_b_id)
             user_weights = await self._get_user_question_weights(user_a_id)
+            question_meta = await self._load_question_options_cache()
 
             weighted_score = 0.0
             total_weight = 0.0
@@ -524,21 +546,87 @@ class ProfileEmbeddingService:
             for question_id in answers_a.keys():
                 if question_id in text_question_ids:
                     continue
-                if question_id in answers_b:
-                    weight = user_weights.get(question_id, 1.0)
-                    if answers_a[question_id] == answers_b[question_id]:
-                        weighted_score += 1.0 * weight
-                    elif answers_a[question_id] and answers_b[question_id]:
-                        weighted_score += 0.5 * weight
-                    total_weight += weight
+                if question_id not in answers_b:
+                    continue
+
+                meta = question_meta.get(question_id, {})
+                if meta.get('is_dealbreaker', False):
+                    continue  # hard filter handled separately
+
+                options = meta.get('options', [])
+                base_w = meta.get('base_weight', 0.5)
+                learned_w = user_weights.get(question_id, 1.0)
+                effective_weight = base_w * learned_w
+
+                similarity = self._option_similarity(
+                    answers_a[question_id], answers_b[question_id], options
+                )
+
+                weighted_score += similarity * effective_weight
+                total_weight += effective_weight
 
             score = weighted_score / total_weight if total_weight > 0 else 0.0
-            logger.info(f"Static score for {user_a_id}: {score:.1%} (personalized weights applied)")
+            logger.info(f"Static score for {user_a_id}: {score:.1%} (base_weight × learned × distance)")
             return score
 
         except Exception as e:
             logger.error(f"Static score calculation failed: {e}")
             return 0.0
+
+    def _option_similarity(self, answer_a: str, answer_b: str, options: List[str]) -> float:
+        """
+        Score how similar two chosen options are based on their index distance
+        in the ordered option list.
+
+        Options are ordered along a meaningful spectrum (e.g. most-healthy to
+        least-healthy conflict style, or most-traditional to most-independent).
+        Adjacent options are more similar than distant ones.
+
+          distance 0 (exact)  → 1.00
+          distance 1           → 0.75
+          distance 2           → 0.45
+          distance 3 (max)     → 0.15
+        """
+        if answer_a == answer_b:
+            return 1.0
+        if not options:
+            return 0.5  # no option list available, neutral fallback
+        try:
+            idx_a = options.index(answer_a)
+            idx_b = options.index(answer_b)
+            distance = abs(idx_a - idx_b)
+            max_dist = len(options) - 1
+            if max_dist == 0:
+                return 1.0
+            # Linear decay: 1.0 at distance=0, 0.1 at distance=max
+            return max(0.1, 1.0 - (distance / max_dist) * 0.9)
+        except ValueError:
+            return 0.5  # answer value not in options list, neutral fallback
+
+    async def _load_question_options_cache(self) -> Dict[str, Any]:
+        """
+        Load choice question metadata (options, base_weight, is_dealbreaker)
+        from DB. Cached for the service lifetime — questions rarely change.
+        """
+        if hasattr(self, '_question_options_cache') and self._question_options_cache:
+            return self._question_options_cache
+        try:
+            result = self.supabase.table('questions').select(
+                'id, options, base_weight, can_be_dealbreaker'
+            ).eq('answer_type', 'choice').execute()
+            cache: Dict[str, Any] = {}
+            for row in (result.data or []):
+                cache[row['id']] = {
+                    'options': [opt['value'] for opt in (row.get('options') or [])],
+                    'base_weight': row.get('base_weight', 0.5),
+                    'is_dealbreaker': row.get('can_be_dealbreaker', False),
+                }
+            self._question_options_cache = cache
+            logger.info(f"Cached metadata for {len(cache)} choice questions")
+            return cache
+        except Exception as e:
+            logger.warning(f"Could not load question options cache: {e}")
+            return {}
 
     async def _get_user_question_weights(self, user_id: str) -> Dict[str, float]:
         """

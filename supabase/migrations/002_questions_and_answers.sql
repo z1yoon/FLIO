@@ -1,20 +1,25 @@
 -- ==========================================
 -- FLIO Questions and Answers System
 -- ==========================================
--- Description: Complete questions and answers system with 40 research-based questions
+-- Description: Complete questions and answers system with 60 research-based questions
 -- Migration: 002_questions_and_answers.sql
--- Created: 2026-02-05
+-- Created: 2026-02-05 | Expanded: 2026-03-22
 --
 -- Includes:
--- - 4 dealbreaker questions (exact match filtering)
--- - 2 marriage planning questions (weighted scoring)
--- - 6 Gottman Four Horsemen questions (conflict resolution)
--- - 5 attachment and emotional support questions
--- - 5 Korean family culture questions
--- - 7 lifestyle and values questions
--- - 3 additional important questions
--- - 3 lifestyle basics questions
--- - 5 open-ended text questions (for semantic AI matching)
+-- - 4 dealbreaker questions (hard filter — exact match required)
+-- - 4 marriage planning questions (weighted scoring)
+-- - 9 Gottman Four Horsemen questions (conflict resolution — 94% predictive accuracy)
+-- - 8 attachment & emotional support questions
+-- - 8 Korean family culture questions
+-- - 9 lifestyle & values questions
+-- - 6 financial compatibility questions
+-- - 2 emotional intelligence questions
+-- - 10 open-ended text questions (semantic AI matching via embedding + cosine)
+--
+-- Matching architecture:
+--   Dealbreakers (can_be_dealbreaker=true): hard filter, eliminates incompatible pairs
+--   Choice questions: base_weight × learned_weight × option-distance similarity
+--   Text questions: Azure OpenAI embedding → cosine similarity (40% of total score)
 --
 -- Tables: questions, user_answers, user_feedback, system_settings
 -- ==========================================
@@ -57,16 +62,16 @@ CREATE TABLE questions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-COMMENT ON TABLE questions IS '40 research-based questions (35 choice + 5 text) for matching compatibility';
+COMMENT ON TABLE questions IS '60 research-based questions (50 choice + 10 text) for matching compatibility';
 COMMENT ON COLUMN questions.id IS 'Unique question identifier (snake_case)';
 COMMENT ON COLUMN questions.category IS 'Question category in Korean';
 COMMENT ON COLUMN questions.text_ko IS 'Question text in Korean';
 COMMENT ON COLUMN questions.text_en IS 'Question text in English';
 COMMENT ON COLUMN questions.answer_type IS 'Type of answer: choice or text';
-COMMENT ON COLUMN questions.options IS 'JSON array of answer options for choice questions';
-COMMENT ON COLUMN questions.base_weight IS 'Base importance weight (0-1) for matching algorithm';
+COMMENT ON COLUMN questions.options IS 'JSON array of answer options for choice questions — order defines similarity distance';
+COMMENT ON COLUMN questions.base_weight IS 'Research-based importance weight (0-1). Multiplied by learned_weight for final score';
 COMMENT ON COLUMN questions.effectiveness_score IS 'Research-based effectiveness score (1-10)';
-COMMENT ON COLUMN questions.can_be_dealbreaker IS 'True = exact match filtering, False = weighted scoring';
+COMMENT ON COLUMN questions.can_be_dealbreaker IS 'True = hard filter (exact match required). False = weighted similarity scoring';
 COMMENT ON COLUMN questions.tags IS 'Optional tags for categorization';
 COMMENT ON COLUMN questions.placeholder IS 'Placeholder text for text input questions';
 COMMENT ON COLUMN questions.max_length IS 'Maximum character length for text questions';
@@ -364,11 +369,123 @@ INSERT INTO questions (id, category, text_ko, text_en, answer_type, options, bas
 'What was the most challenging moment in your life, how did you overcome it, and how did it shape who you are today?', 'text', '[]'::jsonb, 0.95, false);
 
 -- ==========================================
+-- QUESTIONS DATA EXPANSION (+20 → 60 total)
+-- ==========================================
+-- 15 new choice questions + 5 new text questions
+
+INSERT INTO questions (id, category, text_ko, text_en, answer_type, options, base_weight, can_be_dealbreaker) VALUES
+
+-- Gottman expansion (+3 choice, weight 0.90-0.95)
+('stonewalling_pattern', '갈등해결', '갈등 상황에서 대화를 멈추고 침묵하거나 회피한 적이 있나요?',
+'Have you ever stopped talking and withdrawn during conflict?', 'choice',
+'[{"value":"rarely","label_ko":"거의 없어요, 끝까지 대화하려 해요","label_en":"Rarely, I try to talk through it"},{"value":"when_overwhelmed","label_ko":"압도되면 잠시 쉬었다가 돌아와요","label_en":"When overwhelmed, I take breaks then return"},{"value":"sometimes","label_ko":"가끔 대화를 멈추고 싶어요","label_en":"Sometimes I want to stop talking"},{"value":"often","label_ko":"자주 침묵하거나 물러나요","label_en":"Often withdraw or go silent"}]'::jsonb,
+0.95, false),
+
+('criticism_style', '갈등해결', '파트너의 행동이 불만스러울 때, 어떻게 표현하시나요?',
+'When dissatisfied with partner''s behavior, how do you express it?', 'choice',
+'[{"value":"specific_behavior","label_ko":"구체적 행동을 말해요 (''설거지를 안 했네'')","label_en":"Talk about specific behavior"},{"value":"feeling_focus","label_ko":"제 감정을 전달해요 (''걱정됐어'')","label_en":"Express my feelings"},{"value":"character_attack","label_ko":"성격 문제로 말하게 돼요 (''넌 항상 게을러'')","label_en":"Attribute to character"},{"value":"generalize","label_ko":"''항상'', ''절대'' 같은 말을 써요","label_en":"Use ''always'', ''never'' language"}]'::jsonb,
+0.95, false),
+
+('repair_acceptance', '갈등해결', '다툼 중에 상대방이 농담이나 애정 표현으로 분위기를 풀려 할 때, 어떻게 반응하세요?',
+'When partner tries to lighten mood during conflict, how do you respond?', 'choice',
+'[{"value":"accept","label_ko":"감사하게 받아들이고 분위기가 풀려요","label_en":"Appreciate it and mood lightens"},{"value":"pause_accept","label_ko":"잠시 후 받아들여요","label_en":"Accept after a pause"},{"value":"reject_gentle","label_ko":"지금은 안 되고 나중에 해결하자고 해요","label_en":"Say not now, let''s resolve later"},{"value":"reject_harsh","label_ko":"진지하게 받아들이지 않는다고 느껴요","label_en":"Feel they''re not taking it seriously"}]'::jsonb,
+0.90, false),
+
+-- Attachment expansion (+3 choice, weight 0.85-0.90)
+('abandonment_response', '애착', '연인이 갑자기 연락이 안 되면 어떤 생각이 드시나요?',
+'When partner suddenly doesn''t respond, what goes through your mind?', 'choice',
+'[{"value":"trust","label_ko":"바쁘겠다 생각하고 기다려요","label_en":"Trust they''re busy and wait"},{"value":"slight_worry","label_ko":"조금 걱정되지만 괜찮아요","label_en":"Slightly worried but okay"},{"value":"anxious","label_ko":"불안하고 계속 확인하게 돼요","label_en":"Anxious and keep checking"},{"value":"catastrophize","label_ko":"관계에 문제가 생긴 건 아닐까 걱정돼요","label_en":"Worry something''s wrong with relationship"}]'::jsonb,
+0.90, false),
+
+('emotional_intimacy_comfort', '애착', '연인과 깊은 감정을 나누는 것에 대해 어떻게 느끼세요?',
+'How do you feel about sharing deep emotions with partner?', 'choice',
+'[{"value":"comfortable","label_ko":"편안하고 친밀함을 느껴요","label_en":"Comfortable and feel close"},{"value":"takes_time","label_ko":"시간이 걸리지만 결국 나눠요","label_en":"Takes time but eventually share"},{"value":"uncomfortable","label_ko":"약간 불편하고 부담스러워요","label_en":"Somewhat uncomfortable"},{"value":"avoid","label_ko":"깊은 감정 표현을 피하게 돼요","label_en":"Tend to avoid deep emotional expression"}]'::jsonb,
+0.90, false),
+
+('dependency_independence', '애착', '연인에게 의지하고 도움을 구하는 것에 대해 어떻게 생각하세요?',
+'How do you feel about depending on and asking help from partner?', 'choice',
+'[{"value":"natural","label_ko":"자연스럽고 서로 의지하는 게 좋아요","label_en":"Natural and good to depend on each other"},{"value":"selective","label_ko":"중요한 일은 도움을 구해요","label_en":"Ask for help on important things"},{"value":"prefer_independent","label_ko":"스스로 해결하는 걸 선호해요","label_en":"Prefer to solve things myself"},{"value":"uncomfortable","label_ko":"의지하는 게 불편해요","label_en":"Uncomfortable depending on others"}]'::jsonb,
+0.85, false),
+
+-- Korean family culture expansion (+3 choice, weight 0.85-0.90)
+('inlaw_hierarchy', '가족', '시댁/처가 어른들의 의견이 본인 의견과 다를 때 어떻게 하시겠어요?',
+'When in-laws'' opinions differ from yours, what would you do?', 'choice',
+'[{"value":"respect_follow","label_ko":"어른을 존중하고 따라요","label_en":"Respect elders and follow"},{"value":"discuss_compromise","label_ko":"대화로 절충점을 찾아요","label_en":"Discuss and find compromise"},{"value":"partner_decide","label_ko":"파트너와 함께 결정해요","label_en":"Decide together with partner"},{"value":"own_decision","label_ko":"우리 결정을 우선시해요","label_en":"Prioritize our own decision"}]'::jsonb,
+0.90, false),
+
+('traditional_ceremonies', '가족', '명절에 세배나 차례 등 전통 의식을 어떻게 생각하세요?',
+'How do you feel about traditional ceremonies?', 'choice',
+'[{"value":"important_tradition","label_ko":"중요한 전통이라 꼭 지켜요","label_en":"Important tradition, must observe"},{"value":"participate","label_ko":"가족이 중요하게 생각하면 참여해요","label_en":"Participate if family values it"},{"value":"simplified","label_ko":"간소화해서 하고 싶어요","label_en":"Prefer simplified versions"},{"value":"optional","label_ko":"선택적으로 하면 돼요","label_en":"Should be optional"}]'::jsonb,
+0.85, false),
+
+('parent_financial_support', '가족', '결혼 후 부모님께 경제적 지원을 어떻게 할 계획이세요?',
+'How do you plan to provide financial support to parents after marriage?', 'choice',
+'[{"value":"regular_significant","label_ko":"정기적으로 넉넉히 드려요","label_en":"Regularly and generously"},{"value":"regular_modest","label_ko":"정기적으로 적당히 드려요","label_en":"Regularly but modestly"},{"value":"as_needed","label_ko":"필요할 때 도와드려요","label_en":"Help when needed"},{"value":"minimal","label_ko":"최소한으로 하고 싶어요","label_en":"Prefer minimal support"}]'::jsonb,
+0.90, false),
+
+-- Marriage planning expansion (+2 choice, weight 0.85-0.90)
+('marriage_housing', '결혼계획', '결혼 후 주거는 어떻게 하고 싶으세요?',
+'What are your housing plans after marriage?', 'choice',
+'[{"value":"buy_house","label_ko":"집을 사서 독립하고 싶어요","label_en":"Want to buy and live independently"},{"value":"rent_independent","label_ko":"전세/월세로 독립하고 싶어요","label_en":"Want to rent independently"},{"value":"near_family","label_ko":"가족 근처에 살고 싶어요","label_en":"Want to live near family"},{"value":"with_family","label_ko":"가족과 함께 살 수 있어요","label_en":"Can live with family"}]'::jsonb,
+0.90, false),
+
+('gender_roles_marriage', '결혼계획', '결혼 생활에서 성역할에 대해 어떻게 생각하세요?',
+'What are your views on gender roles in marriage?', 'choice',
+'[{"value":"equal_partnership","label_ko":"완전히 평등한 파트너십","label_en":"Completely equal partnership"},{"value":"flexible","label_ko":"상황에 맞게 유연하게","label_en":"Flexible based on situation"},{"value":"some_traditional","label_ko":"어느 정도 전통적 역할이 있어요","label_en":"Some traditional roles"},{"value":"traditional","label_ko":"전통적 역할이 중요해요","label_en":"Traditional roles are important"}]'::jsonb,
+0.85, false),
+
+-- Financial compatibility expansion (+2 choice, weight 0.85-0.90)
+('savings_spending_style', '재정', '돈 관리 스타일은 어떤가요?',
+'What''s your money management style?', 'choice',
+'[{"value":"aggressive_saver","label_ko":"철저히 저축해요 (월급의 40% 이상)","label_en":"Aggressive saver (40%+ of income)"},{"value":"balanced","label_ko":"저축과 지출의 균형 (20-30%)","label_en":"Balanced (20-30% savings)"},{"value":"enjoy_present","label_ko":"현재를 즐기는 편 (10-20%)","label_en":"Enjoy present (10-20% savings)"},{"value":"spend_freely","label_ko":"자유롭게 쓰는 편","label_en":"Spend freely"}]'::jsonb,
+0.85, false),
+
+('debt_attitude', '재정', '빚/대출에 대해 어떻게 생각하세요?',
+'How do you feel about debt and loans?', 'choice',
+'[{"value":"avoid_completely","label_ko":"절대 피하고 싶어요","label_en":"Want to avoid completely"},{"value":"only_necessary","label_ko":"필요한 것만 (집, 차)","label_en":"Only for necessities"},{"value":"strategic","label_ko":"전략적으로 활용해요","label_en":"Use strategically"},{"value":"comfortable","label_ko":"편하게 생각해요","label_en":"Comfortable with it"}]'::jsonb,
+0.90, false),
+
+-- Lifestyle expansion (+1 choice, weight 0.80)
+('weekend_preference', '라이프스타일', '이상적인 주말은 어떤 모습인가요?',
+'What''s your ideal weekend?', 'choice',
+'[{"value":"active_outdoor","label_ko":"활발하게 야외활동","label_en":"Active outdoor activities"},{"value":"cultural","label_ko":"문화생활 (영화, 전시, 공연)","label_en":"Cultural activities"},{"value":"social","label_ko":"친구들과 만남","label_en":"Meeting friends"},{"value":"rest_home","label_ko":"집에서 푹 쉬기","label_en":"Rest at home"}]'::jsonb,
+0.80, false),
+
+-- Emotional intelligence expansion (+1 choice, weight 0.85)
+('emotional_self_awareness', '감정지원', '본인의 감정 상태를 얼마나 잘 인식하시나요?',
+'How well do you recognize your emotional state?', 'choice',
+'[{"value":"very_aware","label_ko":"항상 잘 인식해요","label_en":"Always very aware"},{"value":"usually","label_ko":"대체로 잘 알아차려요","label_en":"Usually recognize well"},{"value":"sometimes","label_ko":"때때로 놓칠 때가 있어요","label_en":"Sometimes miss it"},{"value":"struggle","label_ko":"감정 인식이 어려워요","label_en":"Struggle with emotional awareness"}]'::jsonb,
+0.85, false);
+
+-- Text question expansion (+5 text)
+INSERT INTO questions (id, category, text_ko, text_en, answer_type, options, base_weight, can_be_dealbreaker, placeholder, max_length) VALUES
+
+('past_conflict_learning', '성장', '과거 연애에서 가장 힘들었던 갈등은 무엇이었고, 그 경험에서 무엇을 배우셨나요?',
+'What was the most difficult conflict in past relationships, and what did you learn?', 'text', '[]'::jsonb, 0.95, false,
+'예: ''전 파트너는 대화를 회피했는데, 저는 끝까지 풀고 싶어했어요. 이제는 상대의 대화 스타일을 먼저 이해하려 노력해요.''', 500),
+
+('family_relationship_impact', '가족', '가족과의 관계가 연애/결혼 생활에 어떤 영향을 줄 것 같나요? 파트너에게 바라는 가족관은?',
+'How will your family relationships influence your romantic life? What family values do you want in a partner?', 'text', '[]'::jsonb, 0.90, false,
+'예: ''명절에는 양가를 공평하게 방문하고 싶어요. 서로 가족을 존중하되 우리 가정을 우선시하는 분이면 좋겠어요.''', 500),
+
+('money_philosophy_goals', '재정', '돈에 대한 본인의 철학과 5-10년 후 재정 목표는 무엇인가요?',
+'What''s your financial philosophy and your financial goals in 5-10 years?', 'text', '[]'::jsonb, 0.90, false,
+'예: ''저축을 중요하게 생각하지만 경험에도 투자하는 편이에요. 5년 후에는 전세 자금을 마련하고 싶어요.''', 500),
+
+('love_expression_style', '애정표현', '사랑받는다고 느끼는 순간은 언제이며, 연인에게 어떤 방식으로 사랑을 표현하시나요?',
+'When do you feel loved, and how do you express love?', 'text', '[]'::jsonb, 0.85, false,
+'예: ''작은 것도 기억해줄 때 사랑받는다고 느껴요. 저는 응원의 말과 깜짝 선물로 사랑을 표현해요.''', 500),
+
+('growth_support_philosophy', '성장', '개인적 성장과 꿈을 위해 파트너에게 바라는 지원은 무엇이며, 파트너의 꿈을 어떻게 지원하고 싶으세요?',
+'What support do you need from partner for personal growth, and how would you support their dreams?', 'text', '[]'::jsonb, 0.90, false,
+'예: ''제 커리어 목표를 존중하고 응원해주는 사람이면 좋겠어요. 저도 파트너의 도전을 적극 응원하고 싶어요.''', 500);
+
+-- ==========================================
 -- SYSTEM SETTINGS INITIALIZATION
 -- ==========================================
 
 INSERT INTO system_settings (key, value, updated_at)
-VALUES ('active_question_count', jsonb_build_object('count', 40), NOW())
+VALUES ('active_question_count', jsonb_build_object('count', 60), NOW())
 ON CONFLICT (key) DO UPDATE SET
     value = EXCLUDED.value,
     updated_at = NOW();
@@ -549,33 +666,27 @@ BEGIN
     SELECT COUNT(*) INTO v_dealbreakers FROM questions WHERE can_be_dealbreaker = true;
 
     RAISE NOTICE '==========================================';
-    RAISE NOTICE 'FLIO 40-Question Database Created';
+    RAISE NOTICE 'FLIO 60-Question Database Created';
     RAISE NOTICE '==========================================';
-    RAISE NOTICE 'Total questions: % (target: 40)', v_total;
-    RAISE NOTICE 'Choice questions: % (target: 35)', v_choice;
-    RAISE NOTICE 'Text questions: % (target: 5)', v_text;
+    RAISE NOTICE 'Total questions: % (target: 60)', v_total;
+    RAISE NOTICE 'Choice questions: % (target: 50)', v_choice;
+    RAISE NOTICE 'Text questions: % (target: 10)', v_text;
     RAISE NOTICE '';
-    RAISE NOTICE 'Dealbreakers: % (gender, age, disability, divorce)', v_dealbreakers;
-    RAISE NOTICE 'Marriage Planning: 2 (timeline, children - weighted scoring)';
-    RAISE NOTICE 'Gottman Four Horsemen: 6 (conflict resolution)';
-    RAISE NOTICE 'Attachment & Emotional: 5 (security, trust, support)';
-    RAISE NOTICE 'Korean Family Culture: 5 (approval, filial piety, rites)';
-    RAISE NOTICE 'Lifestyle & Values: 7';
-    RAISE NOTICE 'Additional Important: 3 (pets, social balance, physical affection)';
-    RAISE NOTICE 'Lifestyle Basics: 3 (location, drinking, smoking)';
-    RAISE NOTICE 'Open-ended Text: 5 (semantic AI matching)';
+    RAISE NOTICE 'Dealbreakers: % (gender, age, disability, divorce — hard filter)', v_dealbreakers;
+    RAISE NOTICE 'Choice questions: weighted by base_weight × option-distance similarity';
+    RAISE NOTICE 'Text questions: Azure embedding → cosine similarity (40%% of total score)';
     RAISE NOTICE '==========================================';
 
-    IF v_total != 40 THEN
-        RAISE EXCEPTION 'Question count mismatch: expected 40, got %', v_total;
+    IF v_total != 60 THEN
+        RAISE EXCEPTION 'Question count mismatch: expected 60, got %', v_total;
     END IF;
 
-    IF v_choice != 35 THEN
-        RAISE EXCEPTION 'Choice question count mismatch: expected 35, got %', v_choice;
+    IF v_choice != 50 THEN
+        RAISE EXCEPTION 'Choice question count mismatch: expected 50, got %', v_choice;
     END IF;
 
-    IF v_text != 5 THEN
-        RAISE EXCEPTION 'Text question count mismatch: expected 5, got %', v_text;
+    IF v_text != 10 THEN
+        RAISE EXCEPTION 'Text question count mismatch: expected 10, got %', v_text;
     END IF;
 
     IF v_dealbreakers != 4 THEN
