@@ -87,14 +87,14 @@ class TrustScoreService:
     TIER_BENEFITS = {
         TrustTier.DIAMOND: {
             'daily_matches': 30,
-            'daily_reshuffles': 10,
+            'daily_reshuffles': 5,
             'can_see_tiers': ['diamond', 'coral', 'pearl', 'shell', 'pebble'],
             'badge': '다이아',
             'priority_matching': True
         },
         TrustTier.CORAL: {
             'daily_matches': 20,
-            'daily_reshuffles': 5,
+            'daily_reshuffles': 4,
             'can_see_tiers': ['coral', 'pearl', 'shell', 'pebble'],
             'badge': '산호',
             'priority_matching': True

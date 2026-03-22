@@ -276,9 +276,10 @@ class ReshuffleRequest(BaseModel):
 async def reshuffle_matches_with_preference(request: ReshuffleRequest):
     """
     Find new matches based on user's preference/feedback.
-    Reshuffle count is limited per day based on trust tier:
+    Reshuffle count is limited per day by trust tier (tier number = daily limit):
       조약돌(1) → 1/day  조개(2) → 2/day  진주(3) → 3/day
-      산호(4)   → 5/day  다이아(5) → 10/day
+      산호(4)   → 4/day  다이아(5) → 5/day
+    Additional reshuffles beyond the daily limit are available as paid purchases.
     """
     try:
         supabase = get_supabase_client()
@@ -310,7 +311,7 @@ async def reshuffle_matches_with_preference(request: ReshuffleRequest):
                     "current_tier": badge,
                     "daily_limit": daily_limit,
                     "used_today": used_today,
-                    "upgrade_message": "신뢰 등급을 높이면 더 많은 리셔플을 사용할 수 있습니다.",
+                    "upgrade_message": "추가 리셔플은 건별 결제로 이용하실 수 있습니다.",
                 }
             )
         # --- End limit check ---
