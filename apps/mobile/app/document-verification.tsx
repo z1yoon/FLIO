@@ -333,7 +333,13 @@ export default function VerificationCenterScreen() {
           아무 5개나 인증하면 최고 등급 달성! 직업이 없으면 재직증명서 대신 범죄이력조회서로 대체 가능해요.
         </Text>
 
-        {docs.map(doc => {
+        {/* ── 서류 인증 (등급 결정, 5개 = 다이아) ── */}
+        <Text style={styles.sectionLabel}>서류 인증 — 5개 전부 인증 = 다이아 등급</Text>
+        <Text style={styles.sectionSub}>
+          5개를 모두 인증해야 최고 등급(다이아)이 됩니다. 각 서류 1개당 +20점.
+        </Text>
+
+        {docs.filter(d => d.type !== 'criminal_check').map(doc => {
           const cfg = STATUS_CONFIG[doc.status];
           const isVerified = doc.status === 'verified';
           const isPending = doc.status === 'processing' || doc.status === 'pending';
@@ -373,7 +379,6 @@ export default function VerificationCenterScreen() {
                 </View>
               </View>
 
-              {/* Action button */}
               {!isVerified && (
                 <TouchableOpacity
                   style={[styles.uploadBtn, isPending && styles.uploadBtnDisabled]}
@@ -396,6 +401,68 @@ export default function VerificationCenterScreen() {
             </View>
           );
         })}
+
+        {/* ── 안전 뱃지 (별도 섹션, 등급 점수 없음) ── */}
+        {(() => {
+          const criminalDoc = docs.find(d => d.type === 'criminal_check')!;
+          const cfg = STATUS_CONFIG[criminalDoc.status];
+          const isVerified = criminalDoc.status === 'verified';
+          const isPending = criminalDoc.status === 'processing' || criminalDoc.status === 'pending';
+          const isUploading = uploading === 'criminal_check';
+          return (
+            <View>
+              <Text style={styles.sectionLabel}>안전 뱃지 — 등급 점수와 무관</Text>
+              <Text style={styles.sectionSub}>
+                인증 시 프로필에 🛡️ 안전 뱃지가 표시됩니다. 많은 분들이 범죄 이력 없는 상대를 선호해요.
+              </Text>
+              <View style={[styles.docCard, styles.safetyCard, isVerified && styles.docCardVerified]}>
+                <View style={styles.docTop}>
+                  <Text style={styles.docIcon}>{criminalDoc.icon}</Text>
+                  <View style={styles.docMeta}>
+                    <Text style={styles.docLabel}>{criminalDoc.label}</Text>
+                    <Text style={styles.docDetail}>{criminalDoc.labelDetail}</Text>
+                  </View>
+                  <View style={[styles.statusPill, { backgroundColor: isVerified ? 'rgba(72,187,120,0.2)' : 'rgba(99,179,237,0.2)' }]}>
+                    <Ionicons name={isVerified ? 'shield-checkmark' : 'shield-outline'} size={12} color={isVerified ? '#48BB78' : '#63B3ED'} />
+                    <Text style={[styles.statusText, { color: isVerified ? '#48BB78' : '#63B3ED' }]}>
+                      {isVerified ? '안전 인증됨' : '안전 뱃지'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.docMeta2}>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaKey}>발급처</Text>
+                    <View style={styles.metaValRow}>
+                      <Text style={styles.metaVal}>{criminalDoc.issueFrom}</Text>
+                      {criminalDoc.issueUrl && (
+                        <TouchableOpacity onPress={() => Linking.openURL(criminalDoc.issueUrl!)}>
+                          <Text style={styles.linkText}> 바로가기 →</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                </View>
+                {!isVerified && (
+                  <TouchableOpacity
+                    style={[styles.uploadBtn, styles.safetyBtn, isPending && styles.uploadBtnDisabled]}
+                    onPress={() => handleUpload('criminal_check')}
+                    disabled={isPending || isUploading}
+                    activeOpacity={0.8}
+                  >
+                    {isUploading ? <ActivityIndicator size="small" color="#FFF" /> : (
+                      <>
+                        <Ionicons name={isPending ? 'time' : 'shield-outline'} size={16} color="#FFF" />
+                        <Text style={styles.uploadBtnText}>
+                          {isPending ? '검토 중...' : '안전 뱃지 받기'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          );
+        })()}
 
         {/* ── 보안 안내 ── */}
         <View style={styles.securityNote}>
@@ -493,6 +560,14 @@ const styles = StyleSheet.create({
   uploadBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.1)' },
   uploadBtnText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
 
+  safetyCard: {
+    borderColor: 'rgba(99,179,237,0.3)',
+    backgroundColor: 'rgba(99,179,237,0.05)',
+  },
+  safetyBtn: {
+    backgroundColor: '#2B6CB0',
+    borderColor: 'rgba(99,179,237,0.4)',
+  },
   // Security note
   securityNote: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,

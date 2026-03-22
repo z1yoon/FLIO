@@ -35,15 +35,16 @@ class TrustTier(str, Enum):
 
 class TrustScoreResponse(BaseModel):
     user_id: str
-    total_trust_score: float          # 0.0–1.0
+    total_trust_score: float
     trust_tier: str
-    trust_points: int                 # 0–100 raw points (after all penalties)
-    verified_documents: List[str]     # which docs are verified
-    field_verifications: Dict[str, bool]  # field-level 인증됨 flags
-    reputation_penalty: int           # confirmed reports × 5
-    nli_penalty: int                  # NLI contradictions × 5 (capped at 20)
-    nli_contradictions: List[Dict]    # unresolved contradiction details for UI
-    is_matching_blocked: bool         # True if NLI contradictions >= 2 with score >= 0.8
+    trust_points: int                 # 0–100 (5 core docs × 20pts)
+    verified_documents: List[str]
+    field_verifications: Dict[str, bool]
+    reputation_penalty: int
+    nli_penalty: int
+    nli_contradictions: List[Dict]
+    is_matching_blocked: bool
+    has_safety_badge: bool            # True if criminal_check verified
     last_calculated_at: datetime
 
 
@@ -61,7 +62,8 @@ class TrustScoreService:
     One verified document = one tier upgrade.
     """
 
-    # Each document type, its point value, and the profile fields it verifies
+    # Core 5 documents that determine tier (20pts × 5 = 100pts max)
+    # criminal_check is a SAFETY BADGE — does NOT affect tier score
     DOCUMENT_CONFIG: Dict[str, Dict] = {
         'id_card': {
             'points': 20,
@@ -71,6 +73,7 @@ class TrustScoreService:
             'verifies': ['real_name', 'age'],
             'verifies_label': '이름, 나이',
             'icon': '🪪',
+            'is_tier_doc': True,
         },
         'health_checkup': {
             'points': 20,
@@ -80,6 +83,7 @@ class TrustScoreService:
             'verifies': ['height_cm', 'weight_kg'],
             'verifies_label': '키, 몸무게',
             'icon': '🏥',
+            'is_tier_doc': True,
         },
         'diploma': {
             'points': 20,
@@ -89,6 +93,7 @@ class TrustScoreService:
             'verifies': ['university_name', 'education_level'],
             'verifies_label': '학교, 학력',
             'icon': '🎓',
+            'is_tier_doc': True,
         },
         'employment_cert': {
             'points': 20,
@@ -98,6 +103,7 @@ class TrustScoreService:
             'verifies': ['company_name', 'job_title'],
             'verifies_label': '회사, 직책',
             'icon': '💼',
+            'is_tier_doc': True,
         },
         'income_proof': {
             'points': 20,
@@ -107,15 +113,18 @@ class TrustScoreService:
             'verifies': ['annual_income_range'],
             'verifies_label': '연봉',
             'icon': '💰',
+            'is_tier_doc': True,
         },
+        # Safety badge — verified = 🛡️ shown on profile, does NOT contribute to tier score
         'criminal_check': {
-            'points': 20,
+            'points': 0,
             'label': '범죄이력조회서',
             'label_detail': '성범죄 경력 조회 확인서',
             'issue_from': '경찰청 범죄경력조회 또는 정부24 (무료)',
             'verifies': ['criminal_record_clear'],
             'verifies_label': '범죄 이력 없음',
             'icon': '🛡️',
+            'is_tier_doc': False,  # safety badge only
         },
     }
 
@@ -194,21 +203,20 @@ class TrustScoreService:
         reputation_penalty = self._get_reputation_penalty(user_id)
         nli_penalty, nli_contradictions = self._get_nli_penalty(user_id)
 
+        # Only tier docs (is_tier_doc=True) count toward score; criminal_check = safety badge
         raw_points = min(100, sum(
             self.DOCUMENT_CONFIG[doc]['points']
             for doc in verified_docs
-            if doc in self.DOCUMENT_CONFIG
+            if doc in self.DOCUMENT_CONFIG and self.DOCUMENT_CONFIG[doc].get('is_tier_doc', True)
         ))
         points = max(0, raw_points - reputation_penalty - nli_penalty)
 
         trust_tier = self._determine_tier(points)
         trust_score = round(points / 100, 2)
-
         field_verifications = self._build_field_verifications(verified_docs)
-
-        # Block matching if 2+ severe contradictions (score >= 0.8)
         severe = [c for c in nli_contradictions if c.get('contradiction_score', 0) >= 0.8]
         is_matching_blocked = len(severe) >= 2
+        has_safety_badge = 'criminal_check' in verified_docs
 
         result = TrustScoreResponse(
             user_id=user_id,
@@ -221,6 +229,7 @@ class TrustScoreService:
             nli_penalty=nli_penalty,
             nli_contradictions=nli_contradictions,
             is_matching_blocked=is_matching_blocked,
+            has_safety_badge=has_safety_badge,
             last_calculated_at=datetime.now(),
         )
 
@@ -249,6 +258,7 @@ class TrustScoreService:
                 nli_penalty=data.get('nli_penalty', 0),
                 nli_contradictions=data.get('nli_contradictions', []),
                 is_matching_blocked=data.get('is_matching_blocked', False),
+                has_safety_badge='criminal_check' in data.get('verified_documents', []),
                 last_calculated_at=datetime.fromisoformat(
                     data['last_calculated_at'].replace('Z', '+00:00')
                 ) if data.get('last_calculated_at') else datetime.now(),
