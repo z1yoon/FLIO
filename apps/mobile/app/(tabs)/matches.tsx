@@ -24,6 +24,7 @@ import { supabaseQuestionService } from '../../services/supabaseQuestionService'
 import TrustBadge, { getTierFromScore } from '../../components/TrustBadge';
 import AIManagerChat from '../../components/AIManagerChat';
 import MatchFeedback from '../../components/MatchFeedback';
+import UserProfileModal from '../../components/UserProfileModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -52,6 +53,10 @@ export default function MatchesScreen() {
   const [showAIChat, setShowAIChat] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackMatch, setFeedbackMatch] = useState<MatchResult | null>(null);
+
+  // Profile view state
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileMatch, setProfileMatch] = useState<MatchResult | null>(null);
 
   // Get default tier preferences based on current tier
   const getDefaultTierPreferences = (tier: string): string[] => {
@@ -583,6 +588,12 @@ export default function MatchesScreen() {
                     <Ionicons name="chatbubble-outline" size={18} color="rgba(255,255,255,0.7)" />
                   </TouchableOpacity>
                   <TouchableOpacity
+                    style={styles.profileViewButton}
+                    onPress={() => { setProfileMatch(match); setShowProfileModal(true); }}
+                  >
+                    <Ionicons name="person-outline" size={18} color="rgba(255,255,255,0.7)" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     style={styles.likeButton}
                     onPress={() => handleLikeMatch(match)}
                   >
@@ -610,6 +621,17 @@ export default function MatchesScreen() {
             <Text style={styles.aiManagerFABText}>AI 매니저</Text>
           </LinearGradient>
         </TouchableOpacity>
+      )}
+
+      {/* User Profile Modal */}
+      {profileMatch && (
+        <UserProfileModal
+          visible={showProfileModal}
+          userId={profileMatch.user_id}
+          compatibilityScore={profileMatch.compatibility_score}
+          trustTier={profileMatch.trust_tier}
+          onClose={() => { setShowProfileModal(false); setProfileMatch(null); }}
+        />
       )}
 
       {/* AI Manager Chat Modal */}
@@ -1543,6 +1565,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   feedbackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileViewButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
