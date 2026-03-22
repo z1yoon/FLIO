@@ -87,30 +87,35 @@ class TrustScoreService:
     TIER_BENEFITS = {
         TrustTier.DIAMOND: {
             'daily_matches': 30,
+            'daily_reshuffles': 10,
             'can_see_tiers': ['diamond', 'coral', 'pearl', 'shell', 'pebble'],
             'badge': '다이아',
             'priority_matching': True
         },
         TrustTier.CORAL: {
             'daily_matches': 20,
+            'daily_reshuffles': 5,
             'can_see_tiers': ['coral', 'pearl', 'shell', 'pebble'],
             'badge': '산호',
             'priority_matching': True
         },
         TrustTier.PEARL: {
             'daily_matches': 15,
+            'daily_reshuffles': 3,
             'can_see_tiers': ['pearl', 'shell', 'pebble'],
             'badge': '진주',
             'priority_matching': False
         },
         TrustTier.SHELL: {
             'daily_matches': 10,
+            'daily_reshuffles': 2,
             'can_see_tiers': ['shell', 'pebble'],
             'badge': '조개',
             'priority_matching': False
         },
         TrustTier.PEBBLE: {
             'daily_matches': 5,
+            'daily_reshuffles': 1,
             'can_see_tiers': ['pebble'],
             'badge': '조약돌',
             'priority_matching': False

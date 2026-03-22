@@ -11,6 +11,7 @@ from datetime import datetime
 
 from ..services.profile_embedding_service import profile_embedding_service
 from ..services.azure_openai_service import azure_openai_service
+from ..services.trust_score_service import TrustScoreService, TrustTier
 from ..models.database import get_supabase_client
 from ..middleware.behavioral_logging import log_match_action
 
@@ -274,28 +275,59 @@ class ReshuffleRequest(BaseModel):
 @router.post("/reshuffle-matches", response_model=MatchesResponse)
 async def reshuffle_matches_with_preference(request: ReshuffleRequest):
     """
-    Find new matches based on user's preference/feedback
-    Analyzes user preference with AI and adjusts matching accordingly
-    
-    - **user_id**: User's unique identifier
-    - **preference**: User's preference or reason for reshuffling (e.g., "더 비슷한 취미를 가진 분")
-    - **limit**: Maximum number of matches to return (1-50)
-    - **min_compatibility**: Minimum compatibility score (0.0-1.0)
+    Find new matches based on user's preference/feedback.
+    Reshuffle count is limited per day based on trust tier:
+      조약돌(1) → 1/day  조개(2) → 2/day  진주(3) → 3/day
+      산호(4)   → 5/day  다이아(5) → 10/day
     """
     try:
-        logger.info(f"Reshuffle request from user {request.user_id} with preference: {request.preference}")
-        
-        # Store reshuffle feedback in database for future analysis
+        supabase = get_supabase_client()
+        trust_service = TrustScoreService()
+
+        # --- Reshuffle limit check ---
+        tier_result = await trust_service.get_trust_score(request.user_id)
+        tier_name = tier_result.trust_tier if tier_result else TrustTier.PEBBLE
+        daily_limit = TrustScoreService.TIER_BENEFITS.get(
+            tier_name, TrustScoreService.TIER_BENEFITS[TrustTier.PEBBLE]
+        )['daily_reshuffles']
+
+        # Count today's reshuffles from reshuffle_feedback table
+        from datetime import date
+        today_start = f"{date.today().isoformat()}T00:00:00+00:00"
+        count_result = supabase.table('reshuffle_feedback').select(
+            'id', count='exact'
+        ).eq('user_id', request.user_id).gte('created_at', today_start).execute()
+        used_today = count_result.count or 0
+
+        badge = TrustScoreService.TIER_BENEFITS.get(tier_name, {}).get('badge', '조약돌')
+
+        if used_today >= daily_limit:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "reshuffle_limit_reached",
+                    "message": f"오늘 리셔플 횟수를 모두 사용했습니다. ({used_today}/{daily_limit}회)",
+                    "current_tier": badge,
+                    "daily_limit": daily_limit,
+                    "used_today": used_today,
+                    "upgrade_message": "신뢰 등급을 높이면 더 많은 리셔플을 사용할 수 있습니다.",
+                }
+            )
+        # --- End limit check ---
+
+        logger.info(
+            f"Reshuffle {used_today + 1}/{daily_limit} for user {request.user_id} "
+            f"(tier: {badge}): {request.preference}"
+        )
+
         await profile_embedding_service.store_reshuffle_feedback(
             request.user_id,
             request.preference,
             request.rejected_match_ids
         )
-        
-        # Get user's reshuffle history for context
+
         reshuffle_context = await profile_embedding_service.get_reshuffle_context(request.user_id)
-        
-        # Find matches with preference context, excluding previously shown matches
+
         match_results = await profile_embedding_service.find_compatible_matches_with_preference(
             request.user_id,
             request.preference,
@@ -303,21 +335,16 @@ async def reshuffle_matches_with_preference(request: ReshuffleRequest):
             request.limit * 2,
             request.rejected_match_ids
         )
-        
-        # Filter by minimum compatibility
+
         filtered_matches = [
-            match for match in match_results 
+            match for match in match_results
             if match.compatibility_score >= request.min_compatibility
         ]
-        
-        # Limit results
         final_matches = filtered_matches[:request.limit]
-        
-        # Convert to dict for serialization
         matches_dict = [match.dict() for match in final_matches]
-        
+
         logger.info(f"Found {len(final_matches)} preference-based matches for user {request.user_id}")
-        
+
         return MatchesResponse(
             user_id=request.user_id,
             matches=matches_dict,
@@ -325,13 +352,15 @@ async def reshuffle_matches_with_preference(request: ReshuffleRequest):
             metadata={
                 "algorithm_version": "1.0-preference",
                 "embedding_dimension": 1024,
-                "embedding_weight": 0.6,
-                "weighted_answers_weight": 0.4,
+                "embedding_weight": 0.4,
+                "static_weight": 0.6,
                 "dealbreaker_filtering": True,
-                "photo_verification_required": True,
                 "tier_filtering": True,
                 "user_preference": request.preference,
-                "has_reshuffle_history": len(reshuffle_context) > 0
+                "has_reshuffle_history": len(reshuffle_context) > 0,
+                "reshuffle_remaining": daily_limit - used_today - 1,
+                "reshuffle_limit": daily_limit,
+                "current_tier": badge,
             }
         )
         
