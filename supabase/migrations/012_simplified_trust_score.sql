@@ -46,7 +46,10 @@ COMMENT ON COLUMN user_documents.document_type IS
 ALTER TABLE user_trust_scores
     ADD COLUMN IF NOT EXISTS verified_documents  JSONB  DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS field_verifications JSONB  DEFAULT '{}'::jsonb,
-    ADD COLUMN IF NOT EXISTS reputation_penalty  INT    DEFAULT 0;
+    ADD COLUMN IF NOT EXISTS reputation_penalty  INT    DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS nli_penalty         INT    DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS nli_contradictions  JSONB  DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS is_matching_blocked BOOLEAN DEFAULT FALSE;
 
 -- Drop old component columns that are no longer used
 ALTER TABLE user_trust_scores

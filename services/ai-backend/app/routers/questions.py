@@ -3,7 +3,7 @@ FLIO Question Database API Routes
 Serves questions from Supabase database for Korean dating compatibility
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import logging
@@ -495,9 +495,9 @@ async def get_user_profile(user_id: str):
         # 3. Calculate profile completion
         total_questions_result = get_supabase_client().table('questions').select(
             'id', count='exact'
-        ).eq('is_active', True).execute()
+        ).execute()
         
-        total_questions = total_questions_result.count if total_questions_result.count else 40
+        total_questions = total_questions_result.count if total_questions_result.count else 60
         answered_questions = len(user_answers)
         completion_percentage = (answered_questions / total_questions) * 100 if total_questions > 0 else 0
         
@@ -545,7 +545,7 @@ async def delete_user_answer(user_id: str, question_id: str):
 
 
 @router.post("/answer", response_model=UserAnswerResponse)
-async def save_user_answer(request: UserAnswerRequest):
+async def save_user_answer(request: UserAnswerRequest, background_tasks: BackgroundTasks):
     """
     Save user's answer to a question in Supabase with AI analysis
     
@@ -605,6 +605,17 @@ async def save_user_answer(request: UserAnswerRequest):
                 logger.warning(f"Answer analysis failed: {analysis_error}")
                 # Continue without analysis if it fails
         
+        # After saving, check if all 60 questions are answered → run NLI in background
+        count_result = get_supabase_client().table('user_answers').select(
+            'question_id', count='exact'
+        ).eq('user_id', request.user_id).execute()
+        total_answered = count_result.count or 0
+
+        if total_answered >= 60:
+            from ..services.nli_consistency_service import nli_consistency_service
+            background_tasks.add_task(nli_consistency_service.check_user_consistency, request.user_id)
+            logger.info(f"NLI check queued for {request.user_id} (all 60 questions answered)")
+
         return UserAnswerResponse(
             success=True,
             message=f"Answer saved for question {request.question_id}",

@@ -5,7 +5,7 @@ Korean Marriage Agency Style (결혼정보회사)
 Endpoints for trust score management and verification status.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import logging
@@ -147,16 +147,18 @@ async def get_trust_score(user_id: str):
             total_trust_score=score.total_trust_score,
             trust_tier=score.trust_tier,
             component_scores={
-                'document': score.document_score,
-                'photo': getattr(score, 'photo_score', 0.0),
-                'consistency': score.consistency_score,
-                'behavioral': score.behavioral_score,
-                'social': getattr(score, 'social_score', 0.0),
-                'completeness': score.completeness_score,
-                'reputation': getattr(score, 'reputation_score', 1.0)
+                'trust_points': score.trust_points,
+                'verified_documents': len(score.verified_documents),
+                'reputation_penalty': score.reputation_penalty,
+                'nli_penalty': score.nli_penalty,
+                'is_matching_blocked': score.is_matching_blocked,
             },
             tier_benefits=benefits,
-            calculation_details=score.calculation_details,
+            calculation_details={
+                'verified_documents': score.verified_documents,
+                'nli_contradictions': score.nli_contradictions,
+                'field_verifications': score.field_verifications,
+            },
             last_calculated_at=score.last_calculated_at.isoformat()
         )
 
@@ -549,4 +551,93 @@ async def get_upgrade_path(user_id: str):
 
     except Exception as e:
         logger.error(f"Failed to get upgrade path for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ──────────────────────────────────────────
+# Report System
+# ──────────────────────────────────────────
+
+class ReportRequest(BaseModel):
+    reporter_user_id: str
+    reported_user_id: str
+    report_type: str   # harassment | fake_profile | scam | ghosting | spam | other
+    report_reason: Optional[str] = None
+
+
+class ConfirmReportRequest(BaseModel):
+    """Admin endpoint to confirm a report and penalise the reported user."""
+    report_id: str
+    admin_notes: Optional[str] = None
+
+
+@router.post("/report")
+async def submit_report(request: ReportRequest):
+    """
+    User submits a 신고 against another user.
+    Stored as 'pending' — requires admin confirmation to affect trust score.
+    """
+    try:
+        from ..models.database import get_supabase_client
+        supabase = get_supabase_client()
+
+        ALLOWED_TYPES = {'harassment', 'fake_profile', 'scam', 'ghosting',
+                         'inappropriate_content', 'catfishing', 'spam', 'other'}
+        if request.report_type not in ALLOWED_TYPES:
+            raise HTTPException(status_code=400, detail=f"Invalid report_type: {request.report_type}")
+
+        result = supabase.table('user_reports').insert({
+            'reporter_user_id': request.reporter_user_id,
+            'reported_user_id': request.reported_user_id,
+            'report_type': request.report_type,
+            'report_reason': request.report_reason,
+            'status': 'pending',
+        }).execute()
+
+        logger.info(f"Report submitted: {request.reporter_user_id} → {request.reported_user_id} ({request.report_type})")
+        return {"success": True, "message": "신고가 접수되었습니다. 검토 후 처리됩니다.", "report_id": result.data[0]['id']}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to submit report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/report/{report_id}/confirm")
+async def confirm_report(report_id: str, request: ConfirmReportRequest, background_tasks: BackgroundTasks):
+    """
+    Admin confirms a report → marks it 'confirmed' → recalculates reported user's trust score.
+    Each confirmed report deducts 5 pts from trust score.
+    """
+    try:
+        from ..models.database import get_supabase_client
+        supabase = get_supabase_client()
+
+        # Fetch report to get reported_user_id
+        report_result = supabase.table('user_reports').select(
+            'reported_user_id'
+        ).eq('id', report_id).single().execute()
+
+        if not report_result.data:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        reported_user_id = report_result.data['reported_user_id']
+
+        # Mark confirmed
+        supabase.table('user_reports').update({
+            'status': 'confirmed',
+            'admin_notes': request.admin_notes,
+        }).eq('id', report_id).execute()
+
+        # Recalculate trust score in background
+        background_tasks.add_task(trust_score_service.calculate_trust_score, reported_user_id)
+
+        logger.info(f"Report {report_id} confirmed → trust recalculation queued for {reported_user_id}")
+        return {"success": True, "message": "신고가 확인되었습니다. 신뢰도 점수가 재계산됩니다."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to confirm report: {e}")
         raise HTTPException(status_code=500, detail=str(e))

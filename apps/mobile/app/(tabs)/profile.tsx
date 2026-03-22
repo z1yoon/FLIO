@@ -189,6 +189,43 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} tintColor="#FFFFFF" />}
       >
+        {/* ── NLI Warning Card (모순 발견 시) ── */}
+        {trustData?.nli_contradictions?.length > 0 && (
+          <View style={[styles.card, styles.warningCard]}>
+            <View style={styles.warningHeader}>
+              <Ionicons name="warning" size={20} color="#F6AD55" />
+              <Text style={styles.warningTitle}>
+                {trustData.is_matching_blocked
+                  ? '매칭이 일시 중단되었습니다'
+                  : '프로필 일관성 문제가 발견되었습니다'}
+              </Text>
+            </View>
+            <Text style={styles.warningDesc}>
+              {trustData.is_matching_blocked
+                ? '심각한 프로필 모순이 발견되어 매칭이 중단되었습니다. 아래 내용을 확인하고 프로필을 수정해 주세요.'
+                : '답변 간 논리적 불일치가 발견되었습니다. 프로필을 검토해 주세요.'}
+            </Text>
+            {trustData.nli_contradictions.slice(0, 3).map((c: any, i: number) => (
+              <View key={i} style={styles.contradictionItem}>
+                <Ionicons name="alert-circle-outline" size={14} color="#F6AD55" />
+                <Text style={styles.contradictionText} numberOfLines={2}>
+                  {c.ai_reasoning || `"${c.statement_a?.slice(0, 30)}..." vs "${c.statement_b?.slice(0, 30)}..."`}
+                </Text>
+              </View>
+            ))}
+            <Text style={styles.nliPenaltyNote}>
+              미해결 모순 {trustData.nli_contradictions.length}개 → -{trustData.nli_penalty}점 차감됨
+            </Text>
+            <TouchableOpacity
+              style={styles.fixProfileBtn}
+              onPress={() => router.push('/(onboarding)/extended-profile')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.fixProfileText}>프로필 수정하기</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── Trust Tier Card ── */}
         {trustData && (
           <View style={styles.tierCard}>
@@ -332,6 +369,40 @@ const styles = StyleSheet.create({
   },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 120, gap: 16 },
+
+  // NLI warning
+  warningCard: {
+    borderColor: 'rgba(246,173,85,0.4)',
+    backgroundColor: 'rgba(246,173,85,0.08)',
+  },
+  warningHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10,
+  },
+  warningTitle: {
+    fontSize: 15, fontWeight: '700', color: '#F6AD55', flex: 1,
+  },
+  warningDesc: {
+    fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 19, marginBottom: 12,
+  },
+  contradictionItem: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    marginBottom: 6, paddingLeft: 4,
+  },
+  contradictionText: {
+    flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 17,
+  },
+  nliPenaltyNote: {
+    fontSize: 11, color: 'rgba(246,173,85,0.8)', marginTop: 8, marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  fixProfileBtn: {
+    alignItems: 'center', backgroundColor: 'rgba(246,173,85,0.2)',
+    borderRadius: 10, paddingVertical: 10, borderWidth: 1,
+    borderColor: 'rgba(246,173,85,0.4)',
+  },
+  fixProfileText: {
+    fontSize: 14, fontWeight: '600', color: '#F6AD55',
+  },
 
   // Tier card
   tierCard: {

@@ -37,10 +37,13 @@ class TrustScoreResponse(BaseModel):
     user_id: str
     total_trust_score: float          # 0.0–1.0
     trust_tier: str
-    trust_points: int                 # 0–100 raw points
+    trust_points: int                 # 0–100 raw points (after all penalties)
     verified_documents: List[str]     # which docs are verified
     field_verifications: Dict[str, bool]  # field-level 인증됨 flags
     reputation_penalty: int           # confirmed reports × 5
+    nli_penalty: int                  # NLI contradictions × 5 (capped at 20)
+    nli_contradictions: List[Dict]    # unresolved contradiction details for UI
+    is_matching_blocked: bool         # True if NLI contradictions >= 2 with score >= 0.8
     last_calculated_at: datetime
 
 
@@ -89,6 +92,10 @@ class TrustScoreService:
 
     # Points deducted per confirmed 신고
     REPORT_PENALTY = 5
+
+    # Points deducted per unresolved high-confidence NLI contradiction (score >= 0.7)
+    NLI_CONTRADICTION_PENALTY = 5
+    NLI_PENALTY_CAP = 20  # max 4 contradictions' worth (-20 pts)
 
     # Tier thresholds (in raw points 0–100)
     TIER_THRESHOLDS = {
@@ -148,24 +155,31 @@ class TrustScoreService:
     async def calculate_trust_score(self, user_id: str) -> TrustScoreResponse:
         """
         Calculate trust score by summing verified document points.
-        Subtracts REPORT_PENALTY for each confirmed 신고.
+        Deducts REPORT_PENALTY per confirmed 신고.
+        Deducts NLI_CONTRADICTION_PENALTY per unresolved NLI contradiction (score >= 0.7).
+        Blocks matching if 2+ contradictions have score >= 0.8.
         """
         logger.info(f"Calculating trust score for user {user_id}")
 
         verified_docs = self._get_verified_documents(user_id)
         reputation_penalty = self._get_reputation_penalty(user_id)
+        nli_penalty, nli_contradictions = self._get_nli_penalty(user_id)
 
         raw_points = sum(
             self.DOCUMENT_CONFIG[doc]['points']
             for doc in verified_docs
             if doc in self.DOCUMENT_CONFIG
         )
-        points = max(0, raw_points - reputation_penalty)
+        points = max(0, raw_points - reputation_penalty - nli_penalty)
 
         trust_tier = self._determine_tier(points)
         trust_score = round(points / 100, 2)
 
         field_verifications = self._build_field_verifications(verified_docs)
+
+        # Block matching if 2+ severe contradictions (score >= 0.8)
+        severe = [c for c in nli_contradictions if c.get('contradiction_score', 0) >= 0.8]
+        is_matching_blocked = len(severe) >= 2
 
         result = TrustScoreResponse(
             user_id=user_id,
@@ -175,6 +189,9 @@ class TrustScoreService:
             verified_documents=verified_docs,
             field_verifications=field_verifications,
             reputation_penalty=reputation_penalty,
+            nli_penalty=nli_penalty,
+            nli_contradictions=nli_contradictions,
+            is_matching_blocked=is_matching_blocked,
             last_calculated_at=datetime.now(),
         )
 
@@ -191,14 +208,18 @@ class TrustScoreService:
 
         if result.data:
             data = result.data
+            pts = int((data.get('total_trust_score', 0.0)) * 100)
             return TrustScoreResponse(
                 user_id=user_id,
                 total_trust_score=data.get('total_trust_score', 0.0),
                 trust_tier=data.get('trust_tier', 'pebble'),
-                trust_points=int((data.get('total_trust_score', 0.0)) * 100),
+                trust_points=pts,
                 verified_documents=data.get('verified_documents', []),
                 field_verifications=data.get('field_verifications', {}),
                 reputation_penalty=data.get('reputation_penalty', 0),
+                nli_penalty=data.get('nli_penalty', 0),
+                nli_contradictions=data.get('nli_contradictions', []),
+                is_matching_blocked=data.get('is_matching_blocked', False),
                 last_calculated_at=datetime.fromisoformat(
                     data['last_calculated_at'].replace('Z', '+00:00')
                 ) if data.get('last_calculated_at') else datetime.now(),
@@ -240,6 +261,23 @@ class TrustScoreService:
         confirmed_reports = result.count or 0
         return confirmed_reports * self.REPORT_PENALTY
 
+    def _get_nli_penalty(self, user_id: str):
+        """
+        Returns (penalty_points, contradiction_list).
+        Only counts unresolved contradictions with score >= 0.7.
+        Penalty capped at NLI_PENALTY_CAP.
+        """
+        result = self.supabase.table('consistency_checks').select(
+            'id, source_a, source_b, statement_a, statement_b, '
+            'contradiction_score, ai_reasoning'
+        ).eq('user_id', user_id).eq('is_resolved', False).gte(
+            'contradiction_score', 0.7
+        ).order('contradiction_score', desc=True).execute()
+
+        contradictions = result.data or []
+        penalty = min(len(contradictions) * self.NLI_CONTRADICTION_PENALTY, self.NLI_PENALTY_CAP)
+        return penalty, contradictions
+
     def _build_field_verifications(self, verified_docs: List[str]) -> Dict[str, bool]:
         verifications: Dict[str, bool] = {}
         for doc_type, config in self.DOCUMENT_CONFIG.items():
@@ -262,6 +300,9 @@ class TrustScoreService:
             'verified_documents': result.verified_documents,
             'field_verifications': result.field_verifications,
             'reputation_penalty': result.reputation_penalty,
+            'nli_penalty': result.nli_penalty,
+            'nli_contradictions': result.nli_contradictions,
+            'is_matching_blocked': result.is_matching_blocked,
             'last_calculated_at': result.last_calculated_at.isoformat(),
             'updated_at': datetime.now().isoformat(),
         }, on_conflict='user_id').execute()
@@ -278,3 +319,11 @@ class TrustScoreService:
         if points >= 40: return TrustTier.PEARL.value
         if points >= 20: return TrustTier.SHELL.value
         return TrustTier.PEBBLE.value
+
+    async def get_tier_benefits(self, tier: str) -> Dict:
+        """Return benefits dict for the given tier string."""
+        try:
+            tier_enum = TrustTier(tier)
+        except ValueError:
+            tier_enum = TrustTier.PEBBLE
+        return self.TIER_BENEFITS.get(tier_enum, self.TIER_BENEFITS[TrustTier.PEBBLE])

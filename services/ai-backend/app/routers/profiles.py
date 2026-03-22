@@ -3,7 +3,7 @@ FLIO Profile Management API Routes
 Handles extended profile data, family background, and profile updates
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import logging
@@ -105,7 +105,7 @@ class FullProfileResponse(BaseModel):
 # ==================== Endpoints ====================
 
 @router.post("/extended", response_model=ProfileResponse)
-async def update_extended_profile(request: ExtendedProfileRequest):
+async def update_extended_profile(request: ExtendedProfileRequest, background_tasks: BackgroundTasks):
     """
     Update extended profile information (education, career, income, marital)
 
@@ -187,6 +187,10 @@ async def update_extended_profile(request: ExtendedProfileRequest):
                             old_value=old_value,
                             new_value=new_value
                         )
+
+        # Re-run NLI in background: profile field changes may create new contradictions
+        from ..services.nli_consistency_service import nli_consistency_service
+        background_tasks.add_task(nli_consistency_service.check_user_consistency, request.user_id)
 
         return ProfileResponse(
             success=True,
