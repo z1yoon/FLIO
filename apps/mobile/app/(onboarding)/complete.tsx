@@ -59,8 +59,11 @@ export default function CompleteScreen() {
   }, []);
 
   const handleStart = () => {
-    // Navigate to matches screen to see AI-powered compatibility matches
     router.replace('/(tabs)/matches');
+  };
+
+  const handleVerify = () => {
+    router.push('/document-verification');
   };
 
 
@@ -154,7 +157,27 @@ export default function CompleteScreen() {
         </View>
 
 
-        {/* CTA Button */}
+        {/* CTA Buttons */}
+        <TouchableOpacity
+          style={styles.verifyButton}
+          onPress={handleVerify}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#2E7D7A', '#1A5F5A']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.buttonGradient}
+          >
+            <Ionicons name="shield-checkmark-outline" size={20} color="#4FD1C7" />
+            <View style={styles.verifyBtnText}>
+              <Text style={styles.verifyButtonTitle}>서류 인증으로 등급 올리기</Text>
+              <Text style={styles.verifyButtonSub}>신분증 1개만 해도 조약돌 → 조개 승급!</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.5)" />
+          </LinearGradient>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.startButton}
           onPress={handleStart}
@@ -164,12 +187,16 @@ export default function CompleteScreen() {
             colors={['#00FFC8', '#00D4AA']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={styles.startButtonGradient}
+            style={styles.buttonGradient}
           >
-            <Text style={styles.startButtonText}>매칭 시작하기</Text>
+            <Text style={styles.startButtonText}>일단 매칭 시작하기</Text>
             <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
           </LinearGradient>
         </TouchableOpacity>
+
+        <Text style={styles.skipNote}>
+          서류 인증은 나중에 프로필 탭에서도 할 수 있어요
+        </Text>
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
@@ -272,20 +299,48 @@ const styles = StyleSheet.create({
   },
   startButton: {
     width: '100%',
-    marginTop: 20,
+    marginTop: 10,
   },
-  startButtonGradient: {
+  buttonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
+    paddingVertical: 16,
     borderRadius: 30,
     gap: 8,
   },
+  verifyButton: {
+    width: '100%',
+    marginTop: 20,
+    borderRadius: 30,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(79,209,199,0.4)',
+  },
+  verifyBtnText: {
+    flex: 1,
+    marginLeft: 4,
+  },
+  verifyButtonTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  verifyButtonSub: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 2,
+  },
   startButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.5,
+  },
+  skipNote: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    marginTop: 14,
   },
 });

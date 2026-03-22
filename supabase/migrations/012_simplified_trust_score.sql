@@ -30,6 +30,7 @@ ALTER TABLE user_documents
         'diploma',
         'employment_cert',
         'income_proof',
+        'criminal_check',
         'business_license'
     ));
 

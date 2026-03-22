@@ -66,27 +66,56 @@ class TrustScoreService:
         'id_card': {
             'points': 20,
             'label': '신분증',
+            'label_detail': '주민등록증, 운전면허증, 여권',
+            'issue_from': '본인 소지 서류',
             'verifies': ['real_name', 'age'],
+            'verifies_label': '이름, 나이',
+            'icon': '🪪',
         },
         'health_checkup': {
             'points': 20,
             'label': '건강검진서',
+            'label_detail': '국민건강보험공단 건강검진 결과지',
+            'issue_from': '국민건강보험공단 (건강iN)',
             'verifies': ['height_cm', 'weight_kg'],
+            'verifies_label': '키, 몸무게',
+            'icon': '🏥',
         },
         'diploma': {
             'points': 20,
             'label': '졸업증명서',
+            'label_detail': '대학교 졸업증명서 또는 학위증명서',
+            'issue_from': '대학교 학생처 또는 정부24',
             'verifies': ['university_name', 'education_level'],
+            'verifies_label': '학교, 학력',
+            'icon': '🎓',
         },
         'employment_cert': {
             'points': 20,
             'label': '재직증명서',
+            'label_detail': '회사 발급 재직증명서',
+            'issue_from': '재직 중인 회사 HR/인사팀',
             'verifies': ['company_name', 'job_title'],
+            'verifies_label': '회사, 직책',
+            'icon': '💼',
         },
         'income_proof': {
             'points': 20,
             'label': '소득증명서',
+            'label_detail': '소득금액증명원 (국세청)',
+            'issue_from': '홈택스 또는 정부24 (무료)',
             'verifies': ['annual_income_range'],
+            'verifies_label': '연봉',
+            'icon': '💰',
+        },
+        'criminal_check': {
+            'points': 20,
+            'label': '범죄이력조회서',
+            'label_detail': '성범죄 경력 조회 확인서',
+            'issue_from': '경찰청 범죄경력조회 또는 정부24 (무료)',
+            'verifies': ['criminal_record_clear'],
+            'verifies_label': '범죄 이력 없음',
+            'icon': '🛡️',
         },
     }
 
@@ -165,11 +194,11 @@ class TrustScoreService:
         reputation_penalty = self._get_reputation_penalty(user_id)
         nli_penalty, nli_contradictions = self._get_nli_penalty(user_id)
 
-        raw_points = sum(
+        raw_points = min(100, sum(
             self.DOCUMENT_CONFIG[doc]['points']
             for doc in verified_docs
             if doc in self.DOCUMENT_CONFIG
-        )
+        ))
         points = max(0, raw_points - reputation_penalty - nli_penalty)
 
         trust_tier = self._determine_tier(points)
