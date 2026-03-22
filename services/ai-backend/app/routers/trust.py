@@ -566,9 +566,9 @@ class ReportRequest(BaseModel):
 
 
 class ConfirmReportRequest(BaseModel):
-    """Admin endpoint to confirm a report and penalise the reported user."""
-    report_id: str
+    """Admin confirms report; optional L2 label for ML training (see docs/REPORT_LABELING_AND_AUTOMATION.md)."""
     admin_notes: Optional[str] = None
+    admin_label: Optional[str] = None  # e.g. identity_photo_mismatch, financial_scam
 
 
 @router.post("/report")
@@ -624,11 +624,15 @@ async def confirm_report(report_id: str, request: ConfirmReportRequest, backgrou
 
         reported_user_id = report_result.data['reported_user_id']
 
-        # Mark confirmed
-        supabase.table('user_reports').update({
+        # Mark confirmed + store L2 label for future model training
+        update_row: Dict[str, Any] = {
             'status': 'confirmed',
-            'admin_notes': request.admin_notes,
-        }).eq('id', report_id).execute()
+            'resolution_notes': request.admin_notes,
+        }
+        if request.admin_label:
+            update_row['admin_label'] = request.admin_label
+
+        supabase.table('user_reports').update(update_row).eq('id', report_id).execute()
 
         # Recalculate trust score in background
         background_tasks.add_task(trust_score_service.calculate_trust_score, reported_user_id)

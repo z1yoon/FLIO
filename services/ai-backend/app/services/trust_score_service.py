@@ -2,12 +2,9 @@
 FLIO Trust Score Service
 Korean Marriage Agency Style (결혼정보회사)
 
-Simple verification checklist — 1 document = 1 tier upgrade:
-  신분증   (id_card)        20 pts → verifies 이름, 나이
-  건강검진서 (health_checkup) 20 pts → verifies 키, 몸무게
-  졸업증명서 (diploma)       20 pts → verifies 학교
-  재직증명서 (employment_cert) 20 pts → verifies 회사
-  소득증명서 (income_proof)  20 pts → verifies 연봉
+6 document categories — points sum to 100 (다이아 = 6개 전부 인증):
+  id_card: 20 pts (첫 인증 시 바로 등급 상승 체감)
+  나머지 5종 각 16 pts → 20 + 16×5 = 100
 
 Reputation penalty: -5 pts per confirmed 신고
 Total stored as 0.0–1.0 (pts / 100)
@@ -37,14 +34,13 @@ class TrustScoreResponse(BaseModel):
     user_id: str
     total_trust_score: float
     trust_tier: str
-    trust_points: int                 # 0–100 (5 core docs × 20pts)
+    trust_points: int                 # 0–100 (6 docs, see DOCUMENT_CONFIG points)
     verified_documents: List[str]
     field_verifications: Dict[str, bool]
     reputation_penalty: int
     nli_penalty: int
     nli_contradictions: List[Dict]
     is_matching_blocked: bool
-    has_safety_badge: bool            # True if criminal_check verified
     last_calculated_at: datetime
 
 
@@ -62,8 +58,7 @@ class TrustScoreService:
     One verified document = one tier upgrade.
     """
 
-    # Core 5 documents that determine tier (20pts × 5 = 100pts max)
-    # criminal_check is a SAFETY BADGE — does NOT affect tier score
+    # 6 categories × points = 100 max (20 + 16×5)
     DOCUMENT_CONFIG: Dict[str, Dict] = {
         'id_card': {
             'points': 20,
@@ -73,58 +68,51 @@ class TrustScoreService:
             'verifies': ['real_name', 'age'],
             'verifies_label': '이름, 나이',
             'icon': '🪪',
-            'is_tier_doc': True,
         },
         'health_checkup': {
-            'points': 20,
+            'points': 16,
             'label': '건강검진서',
             'label_detail': '국민건강보험공단 건강검진 결과지',
             'issue_from': '국민건강보험공단 (건강iN)',
             'verifies': ['height_cm', 'weight_kg'],
             'verifies_label': '키, 몸무게',
             'icon': '🏥',
-            'is_tier_doc': True,
         },
         'diploma': {
-            'points': 20,
+            'points': 16,
             'label': '졸업증명서',
             'label_detail': '대학교 졸업증명서 또는 학위증명서',
             'issue_from': '대학교 학생처 또는 정부24',
             'verifies': ['university_name', 'education_level'],
             'verifies_label': '학교, 학력',
             'icon': '🎓',
-            'is_tier_doc': True,
         },
         'employment_cert': {
-            'points': 20,
+            'points': 16,
             'label': '재직증명서',
             'label_detail': '회사 발급 재직증명서',
             'issue_from': '재직 중인 회사 HR/인사팀',
             'verifies': ['company_name', 'job_title'],
             'verifies_label': '회사, 직책',
             'icon': '💼',
-            'is_tier_doc': True,
         },
         'income_proof': {
-            'points': 20,
+            'points': 16,
             'label': '소득증명서',
             'label_detail': '소득금액증명원 (국세청)',
             'issue_from': '홈택스 또는 정부24 (무료)',
             'verifies': ['annual_income_range'],
             'verifies_label': '연봉',
             'icon': '💰',
-            'is_tier_doc': True,
         },
-        # Safety badge — verified = 🛡️ shown on profile, does NOT contribute to tier score
         'criminal_check': {
-            'points': 0,
+            'points': 16,
             'label': '범죄이력조회서',
-            'label_detail': '성범죄 경력 조회 확인서',
+            'label_detail': '범죄·수사 경력 회보서 등',
             'issue_from': '경찰청 범죄경력조회 또는 정부24 (무료)',
             'verifies': ['criminal_record_clear'],
             'verifies_label': '범죄 이력 없음',
             'icon': '🛡️',
-            'is_tier_doc': False,  # safety badge only
         },
     }
 
@@ -203,11 +191,10 @@ class TrustScoreService:
         reputation_penalty = self._get_reputation_penalty(user_id)
         nli_penalty, nli_contradictions = self._get_nli_penalty(user_id)
 
-        # Only tier docs (is_tier_doc=True) count toward score; criminal_check = safety badge
         raw_points = min(100, sum(
             self.DOCUMENT_CONFIG[doc]['points']
             for doc in verified_docs
-            if doc in self.DOCUMENT_CONFIG and self.DOCUMENT_CONFIG[doc].get('is_tier_doc', True)
+            if doc in self.DOCUMENT_CONFIG
         ))
         points = max(0, raw_points - reputation_penalty - nli_penalty)
 
@@ -216,7 +203,6 @@ class TrustScoreService:
         field_verifications = self._build_field_verifications(verified_docs)
         severe = [c for c in nli_contradictions if c.get('contradiction_score', 0) >= 0.8]
         is_matching_blocked = len(severe) >= 2
-        has_safety_badge = 'criminal_check' in verified_docs
 
         result = TrustScoreResponse(
             user_id=user_id,
@@ -229,7 +215,6 @@ class TrustScoreService:
             nli_penalty=nli_penalty,
             nli_contradictions=nli_contradictions,
             is_matching_blocked=is_matching_blocked,
-            has_safety_badge=has_safety_badge,
             last_calculated_at=datetime.now(),
         )
 
@@ -258,7 +243,6 @@ class TrustScoreService:
                 nli_penalty=data.get('nli_penalty', 0),
                 nli_contradictions=data.get('nli_contradictions', []),
                 is_matching_blocked=data.get('is_matching_blocked', False),
-                has_safety_badge='criminal_check' in data.get('verified_documents', []),
                 last_calculated_at=datetime.fromisoformat(
                     data['last_calculated_at'].replace('Z', '+00:00')
                 ) if data.get('last_calculated_at') else datetime.now(),
